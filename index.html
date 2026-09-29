@@ -834,6 +834,18 @@
     .tlhead h3, .tlhead p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   }
 </style>
+<script id="movil-head">
+window.MOVIL = matchMedia("(pointer: coarse)").matches
+  && Math.min(screen.width, screen.height) < 600
+  && new URLSearchParams(location.search).get("modo") !== "completo";
+let hsKeyMovil = "", poiKeyMovil = -1;
+function hsSubsetMovil() {
+  const m = new Set(hsFilterMonths());
+  hsKeyMovil = [...m].join(",");
+  return { type: "FeatureCollection", meta: HS.meta,
+           features: HS.features.filter(f => m.has(f.properties.month)) };
+}
+</script>
 </head>
 <body>
 
@@ -2334,6 +2346,16 @@ function relRebuild() {
 
 /** GeoJSON de los POIs. Son 27 000, cabe hacerlo de una sentada. */
 function buildPoiGeoJSON() {
+  if (window.MOVIL) {
+    const yi = poiYearIndex(); poiKeyMovil = poiOn ? yi : -1;
+    if (!poiOn) return { type: "FeatureCollection", features: [] };
+    const [a0, o0, a1, o1] = POI.bbox, q = POI.quant_max, feats = [];
+    for (let i = 0; i < POI.n; i++) {
+      if (POIARR.year && POIARR.year[i] !== yi) continue;
+      feats.push({ type: "Feature", geometry: { type: "Point", coordinates: [o0 + POIARR.lon[i] * (o1 - o0) / q, a0 + POIARR.lat[i] * (a1 - a0) / q] }, properties: { c: POIARR.cat[i], y: yi } });
+    }
+    return { type: "FeatureCollection", features: feats };
+  }
   const n = POI.n;
   const [lat0, lon0, lat1, lon1] = POI.bbox;
   const Q = POI.quant_max;
@@ -2373,6 +2395,7 @@ function refreshPoiYear() {
   if (!POI || !MAP || !MAP.getLayer("poi-points")) return;
   const idx = poiYearIndex();
   if (idx === null) return;
+  if (window.MOVIL && poiOn && idx !== poiKeyMovil) MAP.getSource("pois").setData(buildPoiGeoJSON());
   MAP.setFilter("poi-points", ["==", ["get", "y"], idx]);
   const n = (POI.counts_by_year || [])[idx];
   if (n != null) $("poi-count").textContent = fmtEs(n);
@@ -2405,6 +2428,7 @@ function buildPoiKey() {
 function setPois(on) {
   if (!POI) return;
   poiOn = on;
+  if (window.MOVIL && MAP.getSource("pois")) MAP.getSource("pois").setData(buildPoiGeoJSON());
   $("btn-poi").setAttribute("aria-pressed", String(on));
   MAP.setLayoutProperty("poi-points", "visibility", on ? "visible" : "none");
   $("poi-key").hidden = !on;
@@ -2628,6 +2652,7 @@ async function boot() {
   catTotalsAll = META.categories.map((_, c) => d3.sum(META.matrix, row => row[c]));
   focusIdx = new Set(META.focus_categories.map(name => META.categories.indexOf(name)));
   monthLo = 0; monthHi = META.months.length - 1;
+  if (window.MOVIL) { let i = META.months.indexOf("2024-08"); if (i < 0) i = monthHi; monthLo = monthHi = i; setTimeout(() => { try { setTimeline(false); } catch (e) {} }, 0); }
   selCats = new Set(META.categories.map((_, i) => i));
 
   buildDatasetPicker();
@@ -2708,7 +2733,7 @@ function setupLayers(geojson) {
   if (HS) {
     // `generateId` da a cada feature un id estable, que es lo que necesita
     // `feature-state` para el realce al pasar el ratón sin recargar la fuente.
-    MAP.addSource("hs", { type: "geojson", data: HS, generateId: true });
+    MAP.addSource("hs", { type: "geojson", data: window.MOVIL ? hsSubsetMovil() : HS, generateId: true });
 
     MAP.addLayer({
       id: "hs-fill", type: "fill", source: "hs",
@@ -4161,6 +4186,7 @@ function idxAt(x) {
 
 /** Repinta todo lo que depende del rango de meses activo. */
 function refreshRange() {
+  if (window.MOVIL && monthHi - monthLo > 5) monthLo = monthHi - 5;
   paintBars();
   syncLabels();          // repinta también la línea de tiempo
   drawCats();
@@ -4345,6 +4371,7 @@ function applyFilters() {
   refreshRelief();
 
   if (HS && MAP.getLayer("hs-fill")) {
+    if (window.MOVIL && hsFilterMonths().join(",") !== hsKeyMovil) MAP.getSource("hs").setData(hsSubsetMovil());
     const meses = ["literal", hsFilterMonths()];
     // Con el foco activo el mapa dibuja SOLO ese conjunto. El filtro de meses
     // se mantiene además: el foco acota qué subgrafos, no qué periodo.
@@ -7257,25 +7284,6 @@ function drawFunnel(R, T) {
 }
 
 boot().catch(e => reportFatal("Error al arrancar el dashboard", e));
-</script>
-<script id="movil-js">
-(function () {
-  if (new URLSearchParams(location.search).get("modo") === "completo") return;
-  if (!matchMedia("(max-width: 640px)").matches) return;
-  const t0 = Date.now();
-  const listo = setInterval(function () {
-    if (Date.now() - t0 > 120000) return clearInterval(listo);
-    if (typeof META === "undefined" || !META || !META.months || typeof refreshRange !== "function") return;
-    if (typeof SIM === "undefined" || !SIM || typeof setTimeline !== "function") return;
-    clearInterval(listo);
-    try {
-      let i = META.months.indexOf("2024-08");
-      if (i < 0) i = META.months.length - 1;
-      monthLo = monthHi = i; refreshRange();
-      setTimeline(false);
-    } catch (e) { console.warn("ajuste móvil:", e); }
-  }, 300);
-})();
 </script>
 </body>
 </html>

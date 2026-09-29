@@ -5,10 +5,10 @@ Lima Metropolitana (2018–2025) y comparar zonas con la misma forma de calles.
 
 **Demo:** https://cesarpr30.github.io/TopoCrime/
 
-Funciona en laptop, iPad y celular. En pantallas angostas el mapa arranca en un
-solo mes y con la línea de tiempo plegada para que cargue rápido; se puede
-cambiar desde la interfaz o abrir la versión completa con
-`?modo=completo`.
+Funciona en laptop, iPad y celular. En celulares (pantalla táctil angosta)
+arranca en un solo mes, con la línea de tiempo plegada, limita el periodo a 6
+meses y carga las POIs solo al activarlas: así la memoria cabe en Safari de
+iPhone. `?modo=completo` abre la versión completa.
 
 ## Qué muestra
 
