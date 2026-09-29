@@ -1,0 +1,2151 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cómo funciona · Subgrafos de crimen urbano</title>
+<meta name="description" content="El método paso a paso: de un millón de denuncias a zonas calientes sobre la red vial de Lima, su forma, sus gemelos y lo que las distingue." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<style>
+  /* Los mismos tokens que el dashboard: quien pasa de uno a otro tiene que
+     reconocer el rojo del crimen, el azul de los subgrafos y el verde de los
+     POIs sin que nadie se lo explique. */
+  :root {
+    --ink:        #14161a;
+    --ink-2:      #3d434d;
+    --muted:      #6b7380;
+    --faint:      #a4acb8;
+    --line:       #e6e8ec;
+    --line-soft:  #f0f2f5;
+    --surface:    #ffffff;
+    --surface-2:  #f6f7f9;
+    --bg:         #fbfbfc;
+    --crime:      #e8354f;
+    --crime-dim:  #fdeaed;
+    --crime-deep: #b81d38;
+    --hs:         #1b6ef3;
+    --hs-dim:     #e7f0ff;
+    --hs-deep:    #0b3f96;
+    --poi:        #0ca678;
+    --poi-dim:    #e3f7f0;
+    --emb:        #7048e8;
+    --emb-dim:    #efeafe;
+    --warn:       #d4a72c;
+    --warn-dim:   #fff8e1;
+    --warn-ink:   #7a5200;
+    --water:      #4dabf7;
+    --shadow-sm:  0 1px 2px rgba(20,22,26,.05), 0 2px 6px rgba(20,22,26,.05);
+    --shadow-md:  0 2px 6px rgba(20,22,26,.06), 0 12px 28px rgba(20,22,26,.09);
+    --r-sm: 8px; --r-md: 12px; --r-lg: 18px;
+    --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 400 16px/1.65 var(--font); -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--hs); }
+  button { font: inherit; color: inherit; }
+  ::selection { background: var(--crime-dim); }
+  svg text { font-family: var(--font); }
+
+  /* ─── Barra superior ─────────────────────────────────────────────── */
+  .nav {
+    position: sticky; top: 0; z-index: 30;
+    background: rgba(251,251,252,.86); backdrop-filter: blur(14px) saturate(1.4);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav-in { max-width: 1160px; margin: 0 auto; padding: 10px 20px;
+            display: flex; align-items: center; gap: 14px; }
+  .back {
+    display: inline-flex; align-items: center; gap: 7px; flex: none;
+    text-decoration: none; color: var(--ink); font-weight: 600; font-size: 13px;
+    padding: 7px 12px 7px 9px; border-radius: 9px; border: 1px solid var(--line);
+    background: var(--surface); transition: background .13s ease;
+  }
+  .back:hover { background: var(--surface-2); }
+  .back svg { width: 16px; height: 16px; }
+  .nav-title { font-size: 13px; font-weight: 650; white-space: nowrap; }
+  .nav-title span { color: var(--muted); font-weight: 500; }
+  .steps { flex: 1; display: flex; gap: 4px; justify-content: center; min-width: 0; overflow-x: auto;
+           scrollbar-width: none; }
+  .steps::-webkit-scrollbar { display: none; }
+  .steps a {
+    flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+    font-size: 11.5px; font-weight: 650; color: var(--muted); text-decoration: none;
+    border: 1px solid var(--line); background: var(--surface); transition: all .2s ease;
+  }
+  .steps a:hover { border-color: var(--faint); color: var(--ink); }
+  .steps a.done { background: var(--ink-2); color: #fff; border-color: var(--ink-2); }
+  .steps a.on { background: var(--crime); color: #fff; border-color: var(--crime);
+                box-shadow: 0 0 0 4px var(--crime-dim); }
+  .tabs { flex: none; display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--line-soft); }
+  .tabs a { padding: 5px 11px; border-radius: 7px; font-size: 12px; font-weight: 600;
+            color: var(--muted); text-decoration: none; white-space: nowrap; }
+  .tabs a:hover { color: var(--ink); }
+  .tabs a[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+  .mode {
+    flex: none; display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--line-soft);
+  }
+  .mode button {
+    border: 0; background: transparent; padding: 5px 11px; border-radius: 7px; cursor: pointer;
+    font-size: 12px; font-weight: 600; color: var(--muted);
+  }
+  .mode button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+  .progress { position: absolute; left: 0; bottom: -1px; height: 2px; background: var(--crime);
+              width: 0; transition: width .1s linear; }
+  @media (max-width: 860px) {
+    .nav-title { display: none; }
+    .back span { display: none; }
+  }
+
+  /* ─── Portada ────────────────────────────────────────────────────── */
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 20px; }
+  .hero { padding: 64px 0 28px; }
+  .eyebrow { font-size: 12px; font-weight: 650; letter-spacing: .12em; text-transform: uppercase;
+             color: var(--crime); margin: 0 0 14px; }
+  .hero h1 { font-size: clamp(32px, 5.4vw, 58px); line-height: 1.05; letter-spacing: -.035em;
+             margin: 0 0 20px; font-weight: 800; max-width: 880px; }
+  .hero h1 em { font-style: normal; color: var(--crime); }
+  .hero .sub { font-size: clamp(16px, 1.9vw, 19px); color: var(--ink-2); max-width: 720px; margin: 0; }
+  .figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 36px 0 0; }
+  .fig {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+    padding: 14px 16px; box-shadow: var(--shadow-sm);
+  }
+  .fig b { display: block; font-size: 26px; font-weight: 750; letter-spacing: -.03em;
+           font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .fig > span { font-size: 12.5px; color: var(--muted); line-height: 1.4; display: block; margin-top: 3px; }
+  .fig.crime b { color: var(--crime); }
+  .fig.hs b { color: var(--hs); }
+
+  /* Flujo del método: los diez pasos, animados, y cada uno lleva a su sección. */
+  .flow { margin: 40px 0 0; position: relative; }
+  .flow-track {
+    display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; position: relative;
+  }
+  .flow-track::before {
+    content: ""; position: absolute; left: 5%; right: 5%; top: 29px; height: 2px;
+    background: repeating-linear-gradient(90deg, var(--faint) 0 6px, transparent 6px 12px);
+    background-size: 24px 2px; animation: dash 1.2s linear infinite;
+  }
+  @keyframes dash { to { background-position: 24px 0; } }
+  @media (prefers-reduced-motion: reduce) { .flow-track::before { animation: none; } }
+  .flow-step {
+    position: relative; text-align: center; text-decoration: none; color: var(--ink);
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 0 2px;
+  }
+  .flow-step .ic {
+    width: 58px; height: 58px; border-radius: 18px; display: grid; place-items: center;
+    background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-sm);
+    transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    animation: pop .5s ease both; animation-delay: calc(var(--i) * 70ms);
+  }
+  @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.9); } }
+  .flow-step:hover .ic { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: var(--faint); }
+  .flow-step .ic svg { width: 26px; height: 26px; }
+  .flow-step small { font-size: 11.5px; font-weight: 600; line-height: 1.25; color: var(--ink-2); }
+  .flow-step i { font-style: normal; font-size: 10px; color: var(--faint); font-weight: 650; letter-spacing: .06em; }
+  .flow-phase { display: grid; grid-template-columns: 5fr 3fr 2fr; gap: 6px; margin-top: 14px; }
+  .flow-phase div { font-size: 11px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase;
+                    text-align: center; padding: 6px; border-radius: 8px; }
+  .flow-phase .p1 { background: var(--crime-dim); color: var(--crime-deep); }
+  .flow-phase .p2 { background: var(--hs-dim); color: var(--hs-deep); }
+  .flow-phase .p3 { background: var(--poi-dim); color: #087f5b; }
+  @media (max-width: 760px) {
+    .flow-track { grid-template-columns: repeat(5, 1fr); row-gap: 18px; }
+    .flow-track::before { display: none; }
+    .flow-phase { display: none; }
+  }
+
+  /* ─── La idea en 30 segundos ─────────────────────────────────────── */
+  .idea { margin: 64px 0 0; }
+  .idea h2, .stage h2 { font-size: clamp(24px, 3.2vw, 34px); letter-spacing: -.025em; line-height: 1.15;
+                        margin: 0 0 12px; font-weight: 750; }
+  .cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 22px; }
+  @media (max-width: 860px) { .cards3 { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+    padding: 20px; box-shadow: var(--shadow-sm);
+  }
+  .card h3 { margin: 12px 0 6px; font-size: 17px; letter-spacing: -.01em; }
+  .card p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+  .card .num { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+               font-weight: 750; font-size: 15px; color: #fff; }
+  .lock {
+    margin-top: 16px; display: flex; gap: 14px; align-items: center;
+    background: var(--ink); color: #fff; border-radius: var(--r-lg); padding: 18px 20px;
+  }
+  .lock svg { width: 34px; height: 34px; flex: none; }
+  .lock p { margin: 0; font-size: 14.5px; color: rgba(255,255,255,.85); }
+  .lock b { color: #fff; }
+
+  /* ─── Etapas ─────────────────────────────────────────────────────── */
+  .stage { padding: 80px 0 8px; }
+  .stage-head { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 8px; }
+  .badge {
+    flex: none; width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center;
+    color: #fff; position: relative;
+  }
+  .badge svg { width: 26px; height: 26px; }
+  .badge em { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%;
+              background: var(--ink); color: #fff; font: 700 11px/22px var(--font); text-align: center;
+              font-style: normal; border: 2px solid var(--bg); }
+  .kicker { font-size: 11.5px; font-weight: 650; letter-spacing: .1em; text-transform: uppercase;
+            color: var(--muted); margin: 3px 0 2px; }
+  .grid2 { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 28px; align-items: start; }
+  .grid2.flip { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+  .grid2.flip > .text { order: 2; }
+  @media (max-width: 920px) {
+    .grid2, .grid2.flip { grid-template-columns: 1fr; }
+    .grid2.flip > .text { order: 0; }
+  }
+  .text p { margin: 0 0 14px; color: var(--ink-2); }
+  .text p b { color: var(--ink); }
+  .plain {
+    border-left: 3px solid var(--crime); background: var(--surface); border-radius: 0 12px 12px 0;
+    padding: 12px 16px; margin: 0 0 16px; font-size: 15.5px; box-shadow: var(--shadow-sm);
+  }
+  .plain::before { content: "En pocas palabras"; display: block; font-size: 10.5px; font-weight: 700;
+                   letter-spacing: .1em; text-transform: uppercase; color: var(--crime); margin-bottom: 3px; }
+  .inlima { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 14px; }
+  .inlima .chip {
+    display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 11px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--line); font-size: 13px; color: var(--muted);
+  }
+  .inlima .chip b { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 700; }
+
+  /* Demo */
+  .demo {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+    box-shadow: var(--shadow-md); overflow: hidden;
+  }
+  .demo-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+               border-bottom: 1px solid var(--line-soft); }
+  .demo-head .tag { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+                    color: #fff; background: var(--ink); padding: 3px 8px; border-radius: 6px; }
+  .demo-head h4 { margin: 0; font-size: 14px; font-weight: 650; flex: 1; }
+  .demo-body { padding: 14px 16px 16px; }
+  .demo svg.viz { display: block; width: 100%; height: auto; touch-action: none; user-select: none; }
+  .ctrls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-top: 12px; }
+  .ctrl { display: flex; flex-direction: column; gap: 3px; min-width: 150px; flex: 1; }
+  .ctrl label { font-size: 11.5px; font-weight: 600; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+  .ctrl label output { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 700; }
+  input[type="range"] { width: 100%; accent-color: var(--crime); }
+  .btn {
+    border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 7px 13px;
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: all .13s ease; white-space: nowrap;
+  }
+  .btn:hover { background: var(--surface-2); border-color: var(--faint); }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .btn.primary:hover { background: #2b2f36; }
+  .btn[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .seg { display: inline-flex; gap: 2px; background: var(--line-soft); padding: 3px; border-radius: 10px; }
+  .seg button { border: 0; background: transparent; border-radius: 7px; padding: 6px 12px; cursor: pointer;
+                font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+  .readout {
+    margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2);
+    font-size: 13.5px; color: var(--ink-2); line-height: 1.5; min-height: 44px;
+  }
+  .readout b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .readout .ok { color: #087f5b; font-weight: 650; }
+  .readout .bad { color: var(--crime-deep); font-weight: 650; }
+  .hintline { font-size: 12px; color: var(--muted); margin-top: 8px; display: flex; gap: 6px; align-items: center; }
+  .hintline svg { width: 14px; height: 14px; flex: none; }
+
+  /* Bloque técnico */
+  details.tech {
+    margin-top: 18px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface);
+  }
+  details.tech > summary {
+    list-style: none; cursor: pointer; padding: 12px 16px; display: flex; align-items: center; gap: 10px;
+    font-size: 13.5px; font-weight: 650;
+  }
+  details.tech > summary::-webkit-details-marker { display: none; }
+  details.tech > summary .sig { width: 26px; height: 26px; border-radius: 8px; background: var(--ink);
+                                color: #fff; display: grid; place-items: center; font: 700 14px/1 Georgia, serif; font-style: italic; }
+  details.tech > summary .chev { margin-left: auto; transition: transform .2s ease; width: 16px; height: 16px; }
+  details.tech[open] > summary .chev { transform: rotate(180deg); }
+  details.tech > summary small { font-weight: 500; color: var(--muted); }
+  @media (max-width: 560px) { details.tech > summary small { display: none; } }
+  .tech-body { padding: 4px 16px 16px; border-top: 1px solid var(--line-soft); }
+  .tech-body p { font-size: 14px; color: var(--ink-2); margin: 12px 0; }
+  .eq {
+    background: var(--surface-2); border-radius: 10px; padding: 12px 14px; margin: 10px 0;
+    overflow-x: auto; overflow-y: hidden; font-size: 15px;
+  }
+  .eq .katex-display { margin: 0; }
+  .eq-note { font-size: 12.5px; color: var(--muted); margin: -4px 0 10px; }
+  .params { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0 4px; }
+  .params td { padding: 6px 8px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  .params td:first-child { white-space: nowrap; font-weight: 650; }
+  .params td:nth-child(2) { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; color: var(--crime-deep); }
+  .params td:last-child { color: var(--muted); }
+  .src { font-size: 12px; color: var(--muted); }
+  .src code { font-family: var(--mono); font-size: 11.5px; background: var(--line-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+
+  /* Tabla de rasgos de forma */
+  .feat { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .feat th { text-align: left; font-weight: 600; color: var(--muted); padding: 4px 6px; font-size: 11px; }
+  .feat td { padding: 3px 6px; border-top: 1px solid var(--line-soft); font-variant-numeric: tabular-nums; }
+  .feat td.v { text-align: right; width: 64px; font-weight: 650; }
+  .feat td.bar { width: 42%; }
+  .feat .track { height: 7px; background: var(--line-soft); border-radius: 4px; overflow: hidden; }
+  .feat .track i { display: block; height: 100%; background: var(--hs); border-radius: 4px; transition: width .35s ease; }
+  .feat tr.hl td { background: #fffbea; }
+  .shapes { display: flex; flex-wrap: wrap; gap: 6px; }
+  .wl-doc { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .wl-doc span { font: 600 11.5px var(--mono); padding: 3px 7px; border-radius: 6px; color: #fff; }
+
+  .limits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; }
+  @media (max-width: 920px) { .limits { grid-template-columns: 1fr; } }
+  .limit { background: var(--warn-dim); border: 1px solid #f3dfa2; border-radius: var(--r-lg); padding: 18px; }
+  .limit h3 { margin: 0 0 6px; font-size: 16px; color: var(--warn-ink); }
+  .limit p { margin: 0; font-size: 14px; color: #5c4400; }
+
+  .foot { margin: 90px 0 0; padding: 36px 0 60px; border-top: 1px solid var(--line); }
+  .foot h3 { font-size: 15px; margin: 0 0 10px; }
+  .refs { font-size: 13px; color: var(--ink-2); columns: 2; column-gap: 32px; padding-left: 18px; }
+  @media (max-width: 760px) { .refs { columns: 1; } }
+  .refs li { margin-bottom: 6px; break-inside: avoid; }
+  .cta {
+    display: inline-flex; align-items: center; gap: 9px; margin-top: 26px;
+    background: var(--crime); color: #fff; text-decoration: none; font-weight: 650;
+    padding: 12px 18px; border-radius: 12px; box-shadow: 0 6px 18px rgba(232,53,79,.3);
+  }
+  .cta:hover { background: var(--crime-deep); }
+  .cta svg { width: 18px; height: 18px; }
+
+  /* Revelado al entrar en pantalla. Sin JS, o con movimiento reducido, todo
+     se ve desde el principio. */
+  .js .reveal { opacity: 0; transform: translateY(14px); transition: opacity .6s ease, transform .6s ease; }
+  .js .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .js .reveal { opacity: 1; transform: none; transition: none; } }
+
+  .tt {
+    position: fixed; z-index: 50; pointer-events: none; background: var(--ink); color: #fff;
+    font-size: 12px; padding: 6px 9px; border-radius: 8px; box-shadow: var(--shadow-md);
+    transform: translate(-50%, calc(-100% - 10px)); white-space: nowrap;
+  }
+  .tt[hidden] { display: none; }
+</style>
+</head>
+<body>
+<script>document.documentElement.classList.add("js"); document.body.classList.add("js");</script>
+
+<!-- Iconos reutilizados: un solo trazo, mismo grosor que el dashboard. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-data" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v6.5c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V5.5"/><path d="M4.5 12v6.5c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V12"/></symbol>
+    <symbol id="i-road" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 6h10M6 7.6l4.8 8.8M18 7.6l-4.8 8.8"/></symbol>
+    <symbol id="i-heat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.9 3.2-5.9 4-9.8 2.6 1.7 3.4 4.2 3.4 5.9 1-.6 1.8-1.8 2.1-3.1 1.9 1.7 3.5 4.1 3.5 7 0 3.6-2.6 6.2-6.5 6.2z"/></symbol>
+    <symbol id="i-peak" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 19l6.5-10 3.5 5 2.5-3.5L22 19z"/><path d="M2 15.5h20" stroke-dasharray="2 2.2"/></symbol>
+    <symbol id="i-dice" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><circle cx="8.5" cy="8.5" r=".9" fill="currentColor"/><circle cx="15.5" cy="15.5" r=".9" fill="currentColor"/><circle cx="12" cy="12" r=".9" fill="currentColor"/><circle cx="15.5" cy="8.5" r=".9" fill="currentColor"/><circle cx="8.5" cy="15.5" r=".9" fill="currentColor"/></symbol>
+    <symbol id="i-shape" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="5" r="1.8"/><circle cx="12" cy="5" r="1.8"/><circle cx="19" cy="5" r="1.8"/><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/><path d="M6.8 5h3.4M13.8 5h3.4M5 6.8v3.4M12 6.8v3.4M6.8 12h3.4M12 13.8v3.4"/></symbol>
+    <symbol id="i-angle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20L19 5M4 20h16"/><path d="M11 20a7 7 0 0 0-2.1-5"/></symbol>
+    <symbol id="i-time" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.2 2"/></symbol>
+    <symbol id="i-twin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M4 7h5l-2.5 6L4 7zM15 7h5l-2.5 6L15 7z"/><path d="M3.5 13a3 3 0 0 0 6 0M14.5 13a3 3 0 0 0 6 0M8 21h8"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8l7.5 3v5.6c0 4.7-3.2 8.3-7.5 9.8-4.3-1.5-7.5-5.1-7.5-9.8V5.8z"/><path d="M8.5 12l2.4 2.4 4.6-4.8"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.3" fill="currentColor"/></symbol>
+    <symbol id="i-hand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11M12 10V4.5a1.5 1.5 0 0 1 3 0V11M15 10.5V6.5a1.5 1.5 0 0 1 3 0v7.5a7 7 0 0 1-7 7h-.6a6 6 0 0 1-4.9-2.6L3.2 15a1.6 1.6 0 0 1 2.6-1.8L9 16V9"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
+  </defs>
+</svg>
+
+<header class="nav">
+  <div class="nav-in">
+    <a class="back" href="./">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+      <span>Volver al mapa</span>
+    </a>
+    <div class="nav-title">Cómo funciona <span>· el método paso a paso</span></div>
+    <nav class="tabs" aria-label="Versión de la explicación">
+      <a href="como-funciona-visual.html">Resumen visual</a>
+      <a href="como-funciona.html" aria-current="page">Paso a paso</a>
+    </nav>
+    <nav class="steps" id="steps" aria-label="Etapas"></nav>
+    <div class="mode" role="group" aria-label="Nivel de detalle">
+      <button data-mode="simple" aria-pressed="true" title="Oculta las fórmulas; cada una se puede abrir a mano">Sencillo</button>
+      <button data-mode="tech" aria-pressed="false" title="Abre todas las fórmulas y parámetros">Técnico</button>
+    </div>
+  </div>
+  <div class="progress" id="progress"></div>
+</header>
+
+<main class="wrap">
+
+<!-- ═══ Portada ═══════════════════════════════════════════════════════ -->
+<section class="hero">
+  <p class="eyebrow">Tesis · Crimen urbano sobre la red vial de Lima</p>
+  <h1>Dos calles con la misma forma, <em>¿por qué una tiene mucho más crimen?</em></h1>
+  <p class="sub">Este proyecto encuentra dónde se concentra el delito <b>siguiendo las calles</b>,
+    describe la <b>forma</b> de cada zona sin mirar su crimen, busca zonas gemelas y compara
+    qué hay en ellas. Aquí se explica cada paso con una demo que puedes tocar y, para quien
+    la quiera, la fórmula exacta que usa el código.</p>
+
+  <div class="figs">
+    <div class="fig crime"><b data-k="kept">—</b><span>denuncias con ubicación válida, de <span data-k="total">—</span> en el archivo</span></div>
+    <div class="fig"><b data-k="nodes">—</b><span>intersecciones en la red vial de Lima</span></div>
+    <div class="fig"><b data-k="months">—</b><span>meses analizados, <span data-k="window">—</span></span></div>
+    <div class="fig hs"><b data-k="hotspots">—</b><span>zonas calientes detectadas, cada una un trozo de red</span></div>
+    <div class="fig crime"><b data-k="lift">—</b><span>más crimen por intersección dentro de las zonas que en la ciudad</span></div>
+  </div>
+
+  <div class="flow" aria-label="Las diez etapas del método">
+    <div class="flow-track" id="flow"></div>
+    <div class="flow-phase"><div class="p1">Fase 1 · Encontrar las zonas</div><div class="p2">Fase 2 · Describirlas</div><div class="p3">Fase 3 · Comparar</div></div>
+  </div>
+</section>
+
+<!-- ═══ La idea ═══════════════════════════════════════════════════════ -->
+<section class="idea reveal">
+  <h2>La idea en treinta segundos</h2>
+  <p class="text" style="max-width:760px;color:var(--ink-2)">Un delito no ocurre en un punto
+  cualquiera del mapa: ocurre en una calle. Por eso todo el método razona sobre la <b>red vial</b>
+  —esquinas unidas por tramos de calle— y no sobre un mapa de calor en línea recta.</p>
+  <div class="cards3">
+    <div class="card"><div class="num" style="background:var(--crime)">1</div>
+      <h3>Encontrar las zonas calientes</h3>
+      <p>Cada denuncia se engancha a su calle, el crimen se «difunde» a lo largo de las calles
+      y se recortan las zonas donde se concentra más de lo que el azar explicaría.</p></div>
+    <div class="card"><div class="num" style="background:var(--hs)">2</div>
+      <h3>Describir su forma</h3>
+      <p>Cada zona se resume en 146 números que dicen <b>cómo es</b>: si es una avenida recta,
+      un damero, una rotonda; de qué tipo de calles está hecha. Nada sobre su crimen.</p></div>
+    <div class="card"><div class="num" style="background:var(--poi)">3</div>
+      <h3>Comparar gemelos</h3>
+      <p>Se buscan zonas con la misma forma y distinto crimen. Si la forma es igual, lo que
+      las separa tiene que estar en otra parte: bancos, bares, comercio…</p></div>
+  </div>
+  <div class="lock">
+    <svg><use href="#i-lock"/></svg>
+    <p><b>La regla que no se rompe:</b> el crimen nunca entra en la descripción de la forma.
+    Si entrara, «zonas parecidas tienen crimen parecido» sería verdad por construcción y la
+    comparación no demostraría nada. Un test automático retuerce todos los conteos de crimen y
+    exige que la descripción salga idéntica, bit a bit.</p>
+  </div>
+</section>
+
+<!-- ═══ 1 · Datos ═════════════════════════════════════════════════════ -->
+<section class="stage" id="s1" data-step="1">
+  <div class="stage-head reveal">
+    <div class="badge" style="background:var(--ink-2)"><svg><use href="#i-data"/></svg><em>1</em></div>
+    <div><p class="kicker">Fase 1 · Datos</p><h2>Limpiar antes de contar</h2></div>
+  </div>
+  <div class="grid2">
+    <div class="text reveal">
+      <p class="plain">De tres millones de filas solo un tercio dice de verdad dónde ocurrió el
+      hecho. El resto está fuera del alcance del estudio o tiene una ubicación inventada, y
+      contarla fabricaría zonas calientes que no existen.</p>
+      <p>El archivo son denuncias de la PNP, 2018–2025. La trampa más seria: más de un millón de
+      filas dicen «geo forzada al centroide de comisaría» y comparten apenas <b>129 puntos</b>.
+      Sobre un mapa de calor cada uno sería el lugar más peligroso de Lima.</p>
+      <p>Otras filas no traen coordenada pero sí dirección. Se recuperan usando el propio archivo
+      como callejero: una dirección se acepta solo si las denuncias bien ubicadas que la comparten
+      están a menos de 100 m entre sí.</p>
+      <div class="inlima">
+        <span class="chip">recuperadas por dirección <b data-k="recovered">—</b></span>
+        <span class="chip">columnas usadas <b data-k="colsKept">—</b> de <b data-k="colsIn">—</b></span>
+      </div>
+    </div>
+    <div class="reveal">
+      <div class="demo">
+        <div class="demo-head"><span class="tag">Datos reales</span><h4>Del archivo a lo que se analiza</h4></div>
+        <div class="demo-body">
+          <svg class="viz" id="funnel" viewBox="0 0 620 300"></svg>
+          <div class="readout" id="funnel-read">Pasa el cursor sobre cada paso.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <details class="tech reveal">
+    <summary><span class="sig">f</span>Para especialistas <small>· reglas de exclusión y recuperación</small><svg class="chev"><use href="#i-chev"/></svg></summary>
+    <div class="tech-body">
+      <p><b>Centroides de relleno.</b> Un punto es de relleno cuando acumula muchos hechos
+      <i>y</i> muchas direcciones escritas distintas a la vez. Una esquina caliente real acumula
+      cientos de hechos sobre dos o tres direcciones.</p>
+      <div class="eq" data-tex="\text{relleno}(p) \iff n_{\text{filas}}(p) \ge 500 \;\wedge\; n_{\text{direcciones}}(p) \ge 100"></div>
+      <p class="eq-note">El mayor: la Plaza de Armas, con <b data-k="fb0rows">—</b> hechos.</p>
+      <p><b>Recuperación por dirección.</b> Cascada de tres niveles (dirección exacta → calle y
+      cuadra → calle). Una clave <i>k</i> se acepta solo si sus filas de confianza son compactas:</p>
+      <div class="eq" data-tex="\max_{i \in k} \; d\!\left(x_i, \bar{x}_k\right) \le 100\ \text{m}"></div>
+      <p>Validación ciega con <i>holdout</i> por dirección (no por fila, o se estaría consultando a
+      sí misma): mediana del error <b data-k="hoP50">—</b> m.</p>
+      <p class="src">Código: <code>pipeline/ingest/crimes.py</code>, <code>profiles.py</code>, <code>geocode.py</code> · datos: <code>validation_report.json</code></p>
+    </div>
+  </details>
+</section>
+
+<!-- ═══ 2 · Red y snapping ════════════════════════════════════════════ -->
+<section class="stage" id="s2" data-step="2">
+  <div class="stage-head reveal">
+    <div class="badge" style="background:var(--ink-2)"><svg><use href="#i-road"/></svg><em>2</em></div>
+    <div><p class="kicker">Fase 1 · Red vial</p><h2>Cada delito, a su calle</h2></div>
+  </div>
+  <div class="grid2 flip">
+    <div class="text reveal">
+      <p class="plain">La ciudad se representa como una red: las esquinas son <b>nodos</b> y los
+      tramos de calle entre ellas, <b>aristas</b>. Cada denuncia se asigna a una esquina, pero
+      primero hay que saber en qué calle está.</p>
+      <p>Lo tentador es mandar cada punto a la esquina más cercana en línea recta. Falla a mitad
+      de cuadra: la esquina más próxima puede estar en la <b>calle de atrás</b>. Por eso el orden
+      importa: primero la calle más cercana, luego la más cercana de sus dos esquinas.</p>
+      <p><b>Arrastra el punto rojo</b> por el mapa y mira cuándo discrepan los dos métodos.</p>
+      <div class="inlima">
+        <span class="chip">enganchadas a la red <b data-k="snapped">—</b></span>
+        <span class="chip">nodos <b data-k="nodes">—</b></span>
+        <span class="chip">aristas <b data-k="edges">—</b></span>
+      </div>
+    </div>
+    <div class="reveal">
+      <div class="demo">
+        <div class="demo-head"><span class="tag">Interactivo</span><h4>Primero la calle, después la esquina</h4></div>
+        <div class="demo-body">
+          <svg class="viz" id="snap" viewBox="0 0 560 330"></svg>
+          <div class="readout" id="snap-read"></div>
+          <div class="hintline"><svg><use href="#i-hand"/></svg>Arrastra el punto rojo.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <details class="tech reveal">
+    <summary><span class="sig">f</span>Para especialistas <small>· proyección y distancia</small><svg class="chev"><use href="#i-chev"/></svg></summary>
+    <div class="tech-body">
+      <p>Arista más cercana con un índice espacial sobre la red proyectada a UTM (una búsqueda
+      lineal sería O(n·m)). Proyección del punto <i>p</i> sobre la arista <i>ab</i>:</p>
+      <div class="eq" data-tex="t^{*} = \operatorname{clip}\!\left(\frac{(p-a)\cdot(b-a)}{\lVert b-a\rVert^{2}},\,0,\,1\right),\qquad \hat p = a + t^{*}(b-a),\qquad v = \arg\min_{u\in\{a,b\}} d(\hat p, u)"></div>
+      <p>Las distancias geográficas usan haversine:</p>
+      <div class="eq" data-tex="a = \sin^2\!\tfrac{\Delta\varphi}{2} + \cos\varphi_1\cos\varphi_2\sin^2\!\tfrac{\Delta\lambda}{2},\qquad d = 2R\,\arctan\!\left(\sqrt{a}\,/\sqrt{1-a}\right)"></div>
+      <table class="params"><tr><td>R</td><td>6 371 000 m</td><td>radio terrestre</td></tr>
+      <tr><td>distancia máx.</td><td>200 m</td><td>más lejos de toda calle, el punto no se engancha</td></tr></table>
+      <p class="src">Código: <code>pipeline/snapping.py</code> · red: OSM <code>drive</code>, simplificada</p>
+    </div>
+  </details>
+</section>
+
+<!-- ═══ 3 · Densidad ══════════════════════════════════════════════════ -->
+<section class="stage" id="s3" data-step="3">
+  <div class="stage-head reveal">
+    <div class="badge" style="background:var(--crime)"><svg><use href="#i-heat"/></svg><em>3</em></div>
+    <div><p class="kicker">Fase 1 · Campo de densidad</p><h2>El crimen se difunde por las calles</h2></div>
+  </div>
+  <div class="grid2">
+    <div class="text reveal">
+      <p class="plain">Cada delito «calienta» su esquina y, cada vez menos, las esquinas vecinas.
+      Pero el calor viaja <b>caminando por las calles</b>, no volando: no cruza una manzana ni un río.</p>
+      <p>El alcance lo fija <b>σ</b>, el ancho de banda: con σ = 120 m, aproximadamente una cuadra
+      corta, el calor se apaga a unos 360 m de recorrido.</p>
+      <p>En la demo hay un río con un solo puente. <b>Pulsa esquinas</b> para añadir delitos,
+      mueve σ y alterna entre distancia por calles y en línea recta: en línea recta el calor
+      salta el río.</p>
+    </div>
+    <div class="reveal">
+      <div class="demo">
+        <div class="demo-head"><span class="tag">Interactivo</span><h4>Calor que camina por la red</h4></div>
+        <div class="demo-body">
+          <svg class="viz" id="dens" viewBox="0 0 560 360"></svg>
+          <div class="ctrls">
+            <div class="ctrl"><label>Ancho de banda σ <output id="dens-s-o">120 m</output></label>
+              <input type="range" id="dens-s" min="40" max="240" step="10" value="120"></div>
+            <div class="seg" id="dens-metric">
+              <button data-m="geo" aria-pressed="true">Por calles</button>
+              <button data-m="euc" aria-pressed="false">En línea recta</button>
+            </div>
+            <button class="btn" id="dens-reset">Reiniciar</button>
+          </div>
+          <div class="readout" id="dens-read"></div>
+          <div class="hintline"><svg><use href="#i-hand"/></svg>Clic en una esquina: +1 delito · Mayús + clic: −1.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <details class="tech reveal">
+    <summary><span class="sig">f</span>Para especialistas <small>· kernel gaussiano geodésico</small><svg class="chev"><use href="#i-chev"/></svg></summary>
+    <div class="tech-body">
+      <p>Para cada mes, sobre todos los nodos <i>v</i> de la red:</p>
+      <div class="eq" data-tex="f(v) = \sum_{s \in V} c(s)\,\exp\!\left(-\frac{d_G(s,v)^2}{2\sigma^2}\right),\qquad d_G(s,v) \le r = 3\sigma"></div>
+      <table class="params">
+        <tr><td>c(s)</td><td>entero</td><td>delitos asignados al nodo s ese mes</td></tr>
+        <tr><td>d<sub>G</sub>(s, v)</td><td>Dijkstra</td><td>distancia <b>a lo largo de las aristas</b>, acotada en r</td></tr>
+        <tr><td>σ</td><td data-k="sigma">—</td><td>ancho de banda (≈ una cuadra corta)</td></tr>
+        <tr><td>r</td><td>3σ</td><td>más allá la gaussiana aporta menos del 1 %</td></tr>
+      </table>
+      <p>Solo se lanza Dijkstra desde nodos con c(s) &gt; 0, que es lo que lo hace tratable sobre
+      135 000 nodos y 90 meses.</p>
+      <p class="src">Código: <code>pipeline/density.py</code> · §4.1 de la especificación</p>
+    </div>
+  </details>
+</section>
+
+<!-- ═══ 4 · Persistencia ══════════════════════════════════════════════ -->
+<section class="stage" id="s4" data-step="4">
+  <div class="stage-head reveal">
+    <div class="badge" style="background:var(--crime)"><svg><use href="#i-peak"/></svg><em>4</em></div>
+    <div><p class="kicker">Fase 1 · Segmentación</p><h2>Islas que emergen al bajar el agua</h2></div>
+  </div>
+  <div class="grid2 flip">
+    <div class="text reveal">
+      <p class="plain">Imagina la densidad como un relieve y una marea que baja. Primero asoman
+      las cumbres; cada una es una isla. Al seguir bajando, las islas se tocan y se funden. Cada
+      zona caliente es una de esas islas.</p>
+      <p>No toda cumbre merece ser zona: un bultito sobre la ladera de una montaña es ruido. La
+      <b>persistencia</b> mide cuánto sobresale un pico sobre el collado donde se une a otro más
+      alto. Los picos con poca persistencia se absorben.</p>
+      <p><b>Baja el agua</b> con el control o pulsa ▶, y sube α para ver cómo se funden los picos
+      menores.</p>
+    </div>
+    <div class="reveal">
+      <div class="demo">
+        <div class="demo-head"><span class="tag">Interactivo</span><h4>Join tree y simplificación por persistencia</h4></div>
+        <div class="demo-body">
+          <svg class="viz" id="pers" viewBox="0 0 560 300"></svg>
+          <div class="ctrls">
+            <button class="btn primary" id="pers-play">▶ Bajar el agua</button>
+            <div class="ctrl"><label>Nivel del agua <output id="pers-l-o"></output></label>
+              <input type="range" id="pers-l" min="0" max="1.05" step="0.005" value="0.6"></div>
+          </div>
+          <div class="ctrls">
+            <div class="ctrl"><label>α · umbral de persistencia <output id="pers-a-o"></output></label>
+              <input type="range" id="pers-a" min="0" max="0.6" step="0.01" value="0.3"></div>
+            <div class="ctrl"><label><span>f<sub>min</sub> · piso de densidad</span> <output id="pers-f-o"></output></label>
+              <input type="range" id="pers-f" min="0" max="0.4" step="0.01" value="0.1"></div>
+          </div>
+          <div class="readout" id="pers-read"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <details class="tech reveal">
+    <summary><span class="sig">f</span>Para especialistas <small>· join tree, persistencia y piso</small><svg class="chev"><use href="#i-chev"/></svg></summary>
+    <div class="tech-body">
+      <p>Barrido descendente sobre <i>f</i> con union-find, equivalente al join tree de los
+      conjuntos de supernivel. Al procesar un nodo: sin vecino procesado → máximo local, abre
+      rama; un vecino → extiende su rama; dos o más → silla: sobrevive la rama de pico más alto.
+      Por construcción, cada región es un <b>subgrafo conexo</b>.</p>
+      <div class="eq" data-tex="\pi(m) = f(m) - f(s_m),\qquad \tau = \alpha\cdot\max_v f(v),\qquad f_{\min} = \rho\cdot\max_v f(v)"></div>
+      <p class="eq-note">s<sub>m</sub> es la silla donde el máximo m se une a una rama más alta. Todo máximo
+      con π(m) &lt; τ se absorbe; los nodos con f &lt; f<sub>min</sub> no entran en el barrido.</p>
+      <table class="params">
+        <tr><td>α</td><td data-k="alpha">—</td><td>umbral de persistencia, relativo al máximo del mes</td></tr>
+        <tr><td>ρ (f_min_ratio)</td><td data-k="fmin">—</td><td>calibrado: es el valor que maximiza F1 en la validación sintética</td></tr>
+      </table>
+      <p class="src">Código: <code>pipeline/hotspots.py</code> · §4.2–4.3</p>
+    </div>
+  </details>
+</section>
+
+<!-- ═══ 5 · Significancia ═════════════════════════════════════════════ -->
+<section class="stage" id="s5" data-step="5">
+  <div class="stage-head reveal">
+    <div class="badge" style="background:var(--crime)"><svg><use href="#i-dice"/></svg><em>5</em></div>
+    <div><p class="kicker">Fase 1 · Significancia</p><h2>¿Es una zona real o es suerte?</h2></div>
+  </div>
+  <div class="grid2">
+    <div class="text reveal">
+      <p class="plain">Incluso repartiendo los delitos al azar aparecen grupitos. Para saber si
+      una zona es real, se repite el mes muchas veces con el crimen barajado y se mira si alguna
+      vez el azar produce algo tan concentrado como lo observado.</p>
+      <p>Así el número de zonas <b>no se elige</b>: es un resultado de cada mes. Sobre Lima pasan
+      el test entre <b data-k="kmin">—</b> y <b data-k="kmax">—</b> zonas al mes.</p>
+      <p>En la demo, cada casilla es una esquina. <b>Simula réplicas</b> al azar y observa dónde cae
+      lo observado frente a lo que produce el azar. Baja la intensidad del foco a cero: el
+      p-valor deja de ser pequeño.</p>
+    </div>
+    <div class="reveal">
+      <div class="demo">
+        <div class="demo-head"><span class="tag">Interactivo</span><h4>Prueba de Monte Carlo</h4></div>
+        <div class="demo-body">
+          <svg class="viz" id="mc" viewBox="0 0 580 290"></svg>
+          <div class="ctrls">
+            <button class="btn" id="mc-obs" aria-pressed="true">Ver lo observado</button>
+            <button class="btn" id="mc-one">Simular 1 réplica</button>
+            <button class="btn primary" id="mc-99">Simular 99</button>
+            <div class="ctrl"><label>Intensidad del foco <output id="mc-k-o"></output></label>
+              <input type="range" id="mc-k" min="0" max="40" step="1" value="18"></div>
+          </div>
+          <div class="readout" id="mc-read"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <details class="tech reveal">
+    <summary><span class="sig">f</span>Para especialistas <small>· razón de verosimilitud de Kulldorff y p de Dwass</small><svg class="chev"><use href="#i-chev"/></svg></summary>
+    <div class="tech-body">
+      <p>El estadístico no es el crimen capturado —eso compara concentración contra tamaño y bajo el
+      nulo daba máximos mayores que cualquier zona observada— sino la log-razón de verosimilitud
+      de Poisson de la región Z:</p>
+      <div class="eq" data-tex="\Lambda(Z) = n_Z \log\frac{n_Z}{\lambda_Z} + (n_G - n_Z)\log\frac{n_G - n_Z}{n_G - \lambda_Z},\qquad \lambda_Z = n_G\,\frac{|Z|}{|N|}"></div>
+      <p class="eq-note">Λ = 0 si la región no está enriquecida (n<sub>Z</sub> ≤ λ<sub>Z</sub>). n<sub>G</sub>: crimen del mes; |Z|/|N|: fracción de nodos.</p>
+      <p>Se simulan B meses bajo el nulo (crimen uniforme sobre la red), se guarda el <b>máximo</b>
+      Λ de cada uno, y el p-valor de una región observada es:</p>
+      <div class="eq" data-tex="p = \frac{1 + \#\{\,b : \Lambda^{*}_{b} \ge \Lambda\,\}}{B + 1}"></div>
+      <p>Comparar contra el máximo corrige por comparaciones múltiples: se pregunta si el azar
+      produce <i>en algún sitio</i> algo así. Si pasan más regiones de las que caben en un mapa,
+      se recortan <b>por Λ descendente</b>, nunca por crimen crudo.</p>
+      <table class="params">
+        <tr><td>B</td><td data-k="B">—</td><td>réplicas; p mínimo alcanzable = 1/(B+1)</td></tr>
+        <tr><td>α<sub>sig</sub></td><td data-k="alphaSig">—</td><td>nivel del test</td></tr>
+        <tr><td>max_k</td><td data-k="maxk">—</td><td>tope de seguridad; ningún mes lo toca</td></tr>
+      </table>
+      <p class="src">Kulldorff (1997); Shiode &amp; Shiode (2020) · código: <code>pipeline/selection.py</code></p>
+    </div>
+  </details>
+</section>
+
+<!-- ═══ 6 · Forma ═════════════════════════════════════════════════════ -->
+<section class="stage" id="s6" data-step="6">
+  <div class="stage-head reveal">
+    <div class="badge" style="background:var(--hs)"><svg><use href="#i-shape"/></svg><em>6</em></div>
+    <div><p class="kicker">Fase 2 · Caracterización</p><h2>Describir la forma, no el crimen</h2></div>
+  </div>
+  <div class="grid2 flip">
+    <div class="text reveal">
+      <p class="plain">Cada zona se convierte en una lista de números que describe su forma:
+      cuántas esquinas, cómo se conectan, si es alargada o compacta, de qué tipo de calles está
+      hecha. Dos zonas con listas parecidas son estructuralmente parecidas.</p>
+      <p>Hay tres bloques. Doce rasgos medidos a mano, 128 aprendidos por un algoritmo que lee
+      los patrones de conexión (<b>graph2vec</b>) y seis sobre la jerarquía vial: avenida, calle,
+      vía expresa…</p>
+      <p><b>Elige una forma</b>: la avenida recta y la esquina en L tienen exactamente el mismo
+      histograma de conexiones. Solo la <b>elongación</b> las distingue; por eso existe el bloque
+      geométrico.</p>
+    </div>
+    <div class="reveal">
+      <div class="demo">
+        <div class="demo-head"><span class="tag">Interactivo</span><h4>Descriptor estructural (12 dimensiones)</h4></div>
+        <div class="demo-body">
+          <div class="shapes" id="shape-pick"></div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:14px;margin-top:10px;align-items:center">
+            <svg class="viz" id="shape" viewBox="0 0 260 220"></svg>
+            <table class="feat" id="shape-feat"></table>
+          </div>
+          <div class="readout" id="shape-read"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:24px">
+    <div class="text reveal">
+      <p><b>Cómo lee patrones graph2vec.</b> Cada esquina empieza etiquetada con su número de
+      calles. En cada ronda, su etiqueta nueva combina la suya con las de sus vecinas. Tras dos
+      rondas, cada etiqueta resume el barrio de esa esquina. La bolsa de etiquetas de la zona es
+      su «documento», y un modelo aprende a colocar cerca documentos con palabras parecidas.</p>
+      <p>No importa cómo se numeren las esquinas: dos zonas con la misma forma producen la misma
+      bolsa.</p>
+    </div>
+    <div class="reveal">
+      <div class="demo">
+        <div class="demo-head"><span class="tag">Paso a paso</span><h4>Reetiquetado Weisfeiler–Lehman</h4></div>
+        <div class="demo-body">
+          <svg class="viz" id="wl" viewBox="0 0 560 210"></svg>
+          <div class="ctrls">
+            <div class="seg" id="wl-it">
+              <button data-t="0" aria-pressed="true">Ronda 0</button>
+              <button data-t="1" aria-pressed="false">Ronda 1</button>
+              <button data-t="2" aria-pressed="false">Ronda 2</button>
+            </div>
+          </div>
+          <div class="readout" id="wl-read"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2 flip" style="margin-top:24px">
+    <div class="text reveal">
+      <p><b>Juntar los tres bloques sin que uno ahogue a los otros.</b> Si se pegan tal cual, el
+      bloque de 128 números pesa diez veces más que el de 12 solo por tener más columnas. Cada
+      bloque se estandariza y se reparte su peso entre sus dimensiones.</p>
+      <p>Pulsa los dos botones para ver cuánto pesa cada bloque en la comparación final.</p>
+    </div>
+    <div class="reveal">
+      <div class="demo">
+        <div class="demo-head"><span class="tag">Interactivo</span><h4>Fusión: el vector de 146 dimensiones</h4></div>
+        <div class="demo-body">
+          <div class="seg" id="fuse-mode">
+            <button data-f="raw" aria-pressed="false">Pegar tal cual</button>
+            <button data-f="w" aria-pressed="true">Repartir w/√d</button>
+          </div>
+          <svg class="viz" id="fuse" viewBox="0 0 560 170" style="margin-top:10px"></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <details class="tech reveal">
+    <summary><span class="sig">f</span>Para especialistas <small>· los 146 números</small><svg class="chev"><use href="#i-chev"/></svg></summary>
+    <div class="tech-body">
+      <p><b>Conectividad (8):</b> log|V|, log|E|, densidad, grado medio y fracción de nodos con grado 1, 2, 3 y ≥ 4.</p>
+      <div class="eq" data-tex="\text{densidad} = \frac{2|E_h|}{|V_h|\,(|V_h|-1)},\qquad \bar k = \frac{2|E_h|}{|V_h|}"></div>
+      <p><b>Geometría métrica (4):</b> log de la longitud media de arista, su coeficiente de
+      variación, log del radio de giro y la elongación, con λ<sub>1</sub> ≥ λ<sub>2</sub> los autovalores de la
+      covarianza de las coordenadas en metros:</p>
+      <div class="eq" data-tex="R_g = \sqrt{\tfrac{1}{|V|}\textstyle\sum_v \lVert x_v - \bar x\rVert^2},\qquad e = \sqrt{\lambda_2/\lambda_1}\quad(0 = \text{lineal},\ 1 = \text{isótropa})"></div>
+      <p>Cada columna se normaliza min–max a [0, 1] sobre todo el corpus.</p>
+      <p><b>graph2vec (128):</b> reetiquetado Weisfeiler–Lehman con ℓ⁽⁰⁾(v) = grado, dos
+      iteraciones, y Doc2Vec PV-DBOW entrenado sobre <i>todo</i> el corpus a la vez:</p>
+      <div class="eq" data-tex="\ell^{(t+1)}(v) = \operatorname{hash}\!\Big(\ell^{(t)}(v)\ \big\Vert\ \operatorname{sort}\{\ell^{(t)}(u) : u \in N(v)\}\Big)"></div>
+      <p><b>Jerarquía vial (6):</b> fracción de aristas en cada clase (vía expresa, avenida,
+      colectora, calle, servicio) y la participación de la dominante.</p>
+      <p><b>Fusión:</b> se estandariza cada bloque, se multiplica por <i>w</i>/√<i>d</i> y se concatena:</p>
+      <div class="eq" data-tex="x = \Big[\ \tfrac{w_s}{\sqrt{12}}\,z_{\text{estr}}\ \Big\Vert\ \tfrac{w_e}{\sqrt{128}}\,z_{\text{g2v}}\ \Big\Vert\ \tfrac{w_j}{\sqrt{6}}\,z_{\text{jer}}\ \Big],\qquad (w_s, w_e, w_j) = (1,\,1,\,0.5)"></div>
+      <p class="src">Código: <code>pipeline/features/structural.py</code>, <code>embedding.py</code>, <code>hierarchy.py</code>, <code>pipeline/similarity.py</code> · la línea roja: <code>tests/test_features.py::test_el_crimen_no_toca_la_similitud</code></p>
+    </div>
+  </details>
+</section>
+
+<!-- ═══ 7 · Similitud ═════════════════════════════════════════════════ -->
+<section class="stage" id="s7" data-step="7">
+  <div class="stage-head reveal">
+    <div class="badge" style="background:var(--hs)"><svg><use href="#i-angle"/></svg><em>7</em></div>
+    <div><p class="kicker">Fase 2 · Similitud</p><h2>Parecido es apuntar en la misma dirección</h2></div>
+  </div>
+  <div class="grid2">
+    <div class="text reveal">
+      <p class="plain">Cada zona es una flecha en un espacio de 146 dimensiones. Dos zonas se
+      parecen si sus flechas apuntan hacia el mismo lado, aunque una sea más larga que la otra.</p>
+      <p>Medir el <b>ángulo</b> y no la distancia es deliberado: una zona grande y una pequeña con
+      la misma forma deben salir parecidas. Para cada zona se guardan sus <b>5 más parecidas</b>
+      de entre las <b data-k="hotspots">—</b>.</p>
+      <p>Arrastra las puntas de las flechas. Pulsa «Alargar B»: el coseno no cambia.</p>
+      <p>Para verlas todas a la vez, el dashboard proyecta las 146 dimensiones a un plano con
+      <b>UMAP</b> y agrupa con <b>HDBSCAN</b>: es el cajón «Espacio de embeddings».</p>
+    </div>
+    <div class="reveal">
+      <div class="demo">
+        <div class="demo-head"><span class="tag">Interactivo</span><h4>Similitud coseno</h4></div>
+        <div class="demo-body">
+          <svg class="viz" id="cos" viewBox="0 0 560 300"></svg>
+          <div class="ctrls"><button class="btn" id="cos-scale">Alargar B ×2</button><button class="btn" id="cos-reset">Reiniciar</button></div>
+          <div class="readout" id="cos-read"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <details class="tech reveal">
+    <summary><span class="sig">f</span>Para especialistas <small>· coseno, top-K, UMAP, HDBSCAN</small><svg class="chev"><use href="#i-chev"/></svg></summary>
+    <div class="tech-body">
+      <div class="eq" data-tex="\operatorname{sim}(h_i, h_j) = \frac{x_i\cdot x_j}{\lVert x_i\rVert\,\lVert x_j\rVert} = \cos\theta_{ij}"></div>
+      <p>Se precalculan los 5 más similares de cada subgrafo sobre toda la ventana. La proyección
+      2D usa UMAP con métrica coseno y el agrupamiento HDBSCAN (tamaño mínimo de clúster 5).
+      Todo lo estocástico toma su semilla de <code>config.yaml</code>, así que la proyección es
+      reproducible.</p>
+      <p class="src">Código: <code>pipeline/similarity.py</code> · §5.5</p>
+    </div>
+  </details>
+</section>
+
+<!-- ═══ 8 · Tiempo ════════════════════════════════════════════════════ -->
+<section class="stage" id="s8" data-step="8">
+  <div class="stage-head reveal">
+    <div class="badge" style="background:var(--hs)"><svg><use href="#i-time"/></svg><em>8</em></div>
+    <div><p class="kicker">Fase 2 · Trayectorias</p><h2>La misma zona, mes tras mes</h2></div>
+  </div>
+  <div class="grid2 flip">
+    <div class="text reveal">
+      <p class="plain">Las zonas se detectan mes a mes. Si una zona de marzo se solapa bastante con
+      una de febrero, se considera la misma que sigue viva. Así se sabe cuáles vuelven siempre
+      (<b>persistentes</b>) y cuáles aparecen una vez (<b>episódicas</b>).</p>
+      <p>El solape se mide con el índice de Jaccard: esquinas compartidas entre esquinas totales.
+      Se exige al menos <b data-k="minIou">—</b>, y una zona puede faltar hasta
+      <b data-k="maxGap">—</b> meses sin perder su identidad.</p>
+      <p>Avanza los meses y mira cómo se enlazan (o no) las dos zonas.</p>
+      <div class="inlima">
+        <span class="chip">trayectorias <b data-k="traj">—</b></span>
+        <span class="chip">persistencia significativa <b data-k="persSig">—</b></span>
+      </div>
+    </div>
+    <div class="reveal">
+      <div class="demo">
+        <div class="demo-head"><span class="tag">Interactivo</span><h4>Enlace por solape (IoU)</h4></div>
+        <div class="demo-body">
+          <svg class="viz" id="traj" viewBox="0 0 560 280"></svg>
+          <div class="ctrls">
+            <button class="btn primary" id="traj-play">▶</button>
+            <div class="ctrl"><label>Mes <output id="traj-m-o"></output></label>
+              <input type="range" id="traj-m" min="0" max="5" step="1" value="0"></div>
+          </div>
+          <div class="readout" id="traj-read"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <details class="tech reveal">
+    <summary><span class="sig">f</span>Para especialistas <small>· las cuatro cantidades de una trayectoria</small><svg class="chev"><use href="#i-chev"/></svg></summary>
+    <div class="tech-body">
+      <div class="eq" data-tex="\operatorname{IoU}(A,B) = \frac{|A\cap B|}{|A\cup B|}"></div>
+      <div class="eq" data-tex="\text{Frequency}(H) = \frac{\#\text{meses con }H}{\#\text{meses}},\qquad \text{Stability}(H) = \frac{1}{k-1}\sum_{t}\operatorname{IoU}(H_t, H_{t+1})"></div>
+      <div class="eq" data-tex="\text{Movement}(H) = \frac{1}{k-1}\sum_t d_G\!\left(\text{seed}_t,\ \text{seed}_{t+1}\right)"></div>
+      <p>El enlace no toma componentes conexas —encadenaría media ciudad en 90 meses— sino
+      seguimiento temporal: cada mes contra la última aparición de cada trayectoria activa, por IoU
+      descendente. Stability es indefinida, no cero, con una sola aparición. La persistencia se
+      contrasta contra un nulo Poisson-binomial por cobertura mensual.</p>
+      <p class="src">Código: <code>pipeline/trajectories.py</code>, <code>casestudies.py</code></p>
+    </div>
+  </details>
+</section>
+
+<!-- ═══ 9 · Comparación ═══════════════════════════════════════════════ -->
+<section class="stage" id="s9" data-step="9">
+  <div class="stage-head reveal">
+    <div class="badge" style="background:var(--poi)"><svg><use href="#i-twin"/></svg><em>9</em></div>
+    <div><p class="kicker">Fase 3 · Comparación</p><h2>Gemelos de forma, crimen distinto</h2></div>
+  </div>
+  <div class="grid2">
+    <div class="text reveal">
+      <p class="plain">Se toman pares de zonas con la misma forma y crimen muy distinto: la
+      «caliente» y su gemela «fría». Como la forma es igual, la diferencia no la explica la
+      calle. Se mira entonces qué <b>lugares</b> (POIs) hay en cada una.</p>
+      <p>Los POIs se miden por su <b>concentración relativa</b>: 2 significa el doble de lo normal
+      en Lima ese año. En el gráfico, cuánto más tiene la caliente que su gemela, en la mediana
+      de los pares, y en qué porcentaje de pares gana.</p>
+      <div class="inlima" id="pair-ex"></div>
+    </div>
+    <div class="reveal">
+      <div class="demo">
+        <div class="demo-head"><span class="tag">Datos reales</span><h4>Qué tiene de más la gemela caliente</h4></div>
+        <div class="demo-body">
+          <svg class="viz" id="poi" viewBox="0 0 580 330"></svg>
+          <div class="readout" id="poi-read">Pasa el cursor sobre una categoría.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <details class="tech reveal">
+    <summary><span class="sig">f</span>Para especialistas <small>· cociente de localización y test emparejado</small><svg class="chev"><use href="#i-chev"/></svg></summary>
+    <div class="tech-body">
+      <p>POIs asociados por contención en la envolvente convexa del subgrafo con un buffer de
+      <b data-k="buffer">—</b> m, sobre la instantánea OSM de su año. Concentración de la categoría
+      c con la <b>red</b> como base —la versión clásica no absorbe una importación masiva de POIs a OSM—:</p>
+      <div class="eq" data-tex="\operatorname{LQ}_c(H) = \frac{n_c(H)\,/\,N_c(t)}{|H|\,/\,|G|}"></div>
+      <p>Diversidad funcional con la entropía de Shannon sobre las 8 categorías:</p>
+      <div class="eq" data-tex="\mathcal{H} = -\sum_{k=1}^{8} p_k \log p_k"></div>
+      <p>El contraste es sobre pares <b>sin miembros repetidos</b> y con la prueba de <b>rangos
+      con signo de Wilcoxon</b> sobre las diferencias dentro del par (los dos ya comparten la
+      forma: tratarlos como muestras independientes tiraría el emparejamiento). Los p-valores se
+      corrigen por Benjamini–Hochberg.</p>
+      <div class="eq" data-tex="W = \sum_{i=1}^{m} \operatorname{sgn}(\Delta_i)\,R_i,\qquad \Delta_i = \operatorname{LQ}_c(H_i^{\text{caliente}}) - \operatorname{LQ}_c(H_i^{\text{fría}})"></div>
+      <p class="src">Código: <code>pipeline/features/pois.py</code>, <code>pipeline/casestudies.py</code> · datos: <code>casestudies.json</code></p>
+    </div>
+  </details>
+</section>
+
+<!-- ═══ 10 · Validación ═══════════════════════════════════════════════ -->
+<section class="stage" id="s10" data-step="10">
+  <div class="stage-head reveal">
+    <div class="badge" style="background:var(--poi)"><svg><use href="#i-check"/></svg><em>10</em></div>
+    <div><p class="kicker">Validación</p><h2>¿Cómo sabemos que funciona?</h2></div>
+  </div>
+  <div class="grid2 flip">
+    <div class="text reveal">
+      <p class="plain">Dos pruebas. Contra métodos simples, con la misma cantidad de calles
+      marcadas, este captura más crimen. Y sobre datos inventados, donde sí se sabe dónde están
+      las zonas, acierta mucho más dónde están.</p>
+      <p><b>Misma huella, más crimen.</b> Las tres técnicas marcan casi las mismas esquinas en
+      total; la diferencia está en cuáles eligen.</p>
+      <p><b>Verdad conocida.</b> Se siembran 15 focos artificiales, se le pasa el resultado al
+      método sin decirle nada y se mide cuánto de lo marcado es foco (<b>precisión</b>) y cuánto
+      de los focos encuentra (<b>sensibilidad</b>). F1 resume las dos.</p>
+      <p>Sin nada sembrado, el test declara <b data-k="nullSig">—</b> zonas: no inventa.</p>
+    </div>
+    <div class="reveal">
+      <div class="demo">
+        <div class="demo-head"><span class="tag">Datos reales</span><h4>Contra las líneas base</h4></div>
+        <div class="demo-body">
+          <svg class="viz" id="val" viewBox="0 0 580 300"></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="grid2" style="margin-top:24px">
+    <div class="text reveal">
+      <p><b>Por qué hace falta F1.</b> Marcar la ciudad entera da sensibilidad perfecta; marcar
+      una sola esquina acertada da precisión perfecta. Mueve y ensancha la zona detectada (rojo)
+      sobre el foco verdadero (verde).</p>
+    </div>
+    <div class="reveal">
+      <div class="demo">
+        <div class="demo-head"><span class="tag">Interactivo</span><h4>Precisión, sensibilidad y F1</h4></div>
+        <div class="demo-body">
+          <svg class="viz" id="f1" viewBox="0 0 560 170"></svg>
+          <div class="ctrls">
+            <div class="ctrl"><label>Centro de lo detectado <output id="f1-c-o"></output></label>
+              <input type="range" id="f1-c" min="0.1" max="0.9" step="0.01" value="0.55"></div>
+            <div class="ctrl"><label>Anchura <output id="f1-w-o"></output></label>
+              <input type="range" id="f1-w" min="0.02" max="0.9" step="0.01" value="0.3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <details class="tech reveal">
+    <summary><span class="sig">f</span>Para especialistas <small>· métricas y diseño sintético</small><svg class="chev"><use href="#i-chev"/></svg></summary>
+    <div class="tech-body">
+      <p>Sobre puntos de referencia interpolados cada 30.48 m a lo largo de las aristas (no sobre
+      nodos, o una calle larga sin cruces pesaría lo mismo que una manzana corta):</p>
+      <div class="eq" data-tex="\text{PPV} = \frac{\#\{r \in S^{*}\cap S_{\text{true}}\}}{\#\{r \in S^{*}\}},\qquad \text{Sens} = \frac{\#\{r \in S^{*}\cap S_{\text{true}}\}}{\#\{r \in S_{\text{true}}\}},\qquad F_1 = \frac{2\,\text{PPV}\cdot\text{Sens}}{\text{PPV}+\text{Sens}}"></div>
+      <p>Proceso de Poisson por clústeres (Shiode &amp; Shiode 2020, §3) con la escala medida en
+      Lima: <b data-k="bParents">—</b> focos, <b data-k="bOff">—</b> hechos en foco y
+      <b data-k="bBg">—</b> de fondo sobre <b data-k="bNodes">—</b> nodos. Diferencias contrastadas
+      con Mann–Whitney. Las líneas base crecen regiones por BFS desde los nodos más calientes con
+      la misma huella: <b>voraz</b> (elige el vecino con más crimen) y <b>anchura</b> (crece
+      igual en todas direcciones).</p>
+      <p class="src">Código: <code>pipeline/synthetic.py</code>, <code>pipeline/baseline.py</code>, <code>pipeline/evaluate.py</code> · datos: <code>benchmark.json</code>, <code>evaluation.json</code></p>
+    </div>
+  </details>
+</section>
+
+<!-- ═══ Límites ═══════════════════════════════════════════════════════ -->
+<section class="stage" id="s-lim">
+  <div class="stage-head reveal">
+    <div><p class="kicker">Honestidad</p><h2>Lo que el método no puede decir</h2></div>
+  </div>
+  <div class="grid2">
+    <div class="text reveal">
+      <p>Un método se entiende también por sus límites. Estos tres están medidos y a la vista en el
+      dashboard; ninguno se ha maquillado.</p>
+      <p><b>σ fija el tamaño mínimo de lo que se distingue.</b> En la validación sintética, al
+      subir σ la sensibilidad sube y la precisión cae: un σ grande encuentra los focos pero los
+      dibuja más anchos de lo que son. El gráfico lo muestra con los datos del barrido.</p>
+    </div>
+    <div class="reveal">
+      <div class="demo">
+        <div class="demo-head"><span class="tag">Datos reales</span><h4>Sensibilidad al ancho de banda σ</h4></div>
+        <div class="demo-body"><svg class="viz" id="sweep" viewBox="0 0 560 250"></svg></div>
+      </div>
+    </div>
+  </div>
+  <div class="limits reveal">
+    <div class="limit"><h3 id="cv-title">Cobertura de la fuente</h3><p id="cv-text">—</p></div>
+    <div class="limit"><h3>Asociación, no causa</h3><p>Que la gemela caliente tenga más bancos no
+      prueba que los bancos atraigan delitos: también pueden atraer denuncias, o compartir una
+      causa común. El diseño controla la forma de la calle, no todo lo demás.</p></div>
+    <div class="limit"><h3>Agrupamiento imperfecto</h3><p>Con el tamaño mínimo de la especificación,
+      HDBSCAN mete más de la mitad del corpus en un solo clúster y deja un tercio como ruido. No se
+      ha ajustado para que salga bonito: el número está a la vista en el dashboard.</p></div>
+  </div>
+</section>
+
+<footer class="foot">
+  <h3>Referencias</h3>
+  <ol class="refs">
+    <li>Kulldorff, M. (1997). A spatial scan statistic. <i>Communications in Statistics – Theory and Methods</i>, 26(6).</li>
+    <li>Shiode, S. &amp; Shiode, N. (2020). A network-based scan statistic for detecting the exact location and extent of hotspots along urban streets. <i>Computers, Environment and Urban Systems</i>.</li>
+    <li>Edelsbrunner, H., Letscher, D. &amp; Zomorodian, A. (2002). Topological persistence and simplification. <i>Discrete &amp; Computational Geometry</i>, 28.</li>
+    <li>Carr, H., Snoeyink, J. &amp; Axen, U. (2003). Computing contour trees in all dimensions. <i>Computational Geometry</i>, 24(2).</li>
+    <li>Shervashidze, N. et al. (2011). Weisfeiler–Lehman graph kernels. <i>JMLR</i>, 12.</li>
+    <li>Narayanan, A. et al. (2017). graph2vec: Learning distributed representations of graphs. <i>MLG Workshop</i>.</li>
+    <li>McInnes, L., Healy, J. &amp; Melville, J. (2018). UMAP: Uniform Manifold Approximation and Projection. arXiv:1802.03426.</li>
+    <li>Campello, R., Moulavi, D. &amp; Sander, J. (2013). Density-based clustering based on hierarchical density estimates. <i>PAKDD</i>.</li>
+    <li>Dwass, M. (1957). Modified randomization tests for nonparametric hypotheses. <i>Annals of Mathematical Statistics</i>, 28(1).</li>
+    <li>Benjamini, Y. &amp; Hochberg, Y. (1995). Controlling the false discovery rate. <i>JRSS B</i>, 57(1).</li>
+  </ol>
+  <a class="cta" href="./">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.5-2.5v-13L9 7m0 13l6-3m-6 3V7m6 10l5.5 2.5v-13L15 4m0 13V4M9 7l6-3"/></svg>
+    Explorar las zonas en el mapa
+  </a>
+</footer>
+
+</main>
+
+<div class="tt" id="tt" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script>
+"use strict";
+/* ═══ Utilidades ═══════════════════════════════════════════════════════ */
+const $ = id => document.getElementById(id);
+const fmtN = n => d3.format(",")(Math.round(n)).replace(/,/g, " ");
+const fmtD = (v, k = 2) => (+v).toFixed(k);
+const pct = (v, k = 1) => (v * 100).toFixed(k).replace(".", ",") + " %";
+const comma = s => String(s).replace(".", ",");
+const C = {
+  crime: "#e8354f", crimeDeep: "#b81d38", hs: "#1b6ef3", hsDeep: "#0b3f96", poi: "#0ca678",
+  emb: "#7048e8", ink: "#14161a", ink2: "#3d434d", muted: "#6b7380", faint: "#a4acb8",
+  line: "#e6e8ec", soft: "#f0f2f5", water: "#4dabf7", warn: "#d4a72c"
+};
+const tt = $("tt");
+function tip(e, html) {
+  if (!html) { tt.hidden = true; return; }
+  tt.innerHTML = html; tt.hidden = false;
+  tt.style.left = e.clientX + "px"; tt.style.top = e.clientY + "px";
+}
+/** RNG con semilla: las demos aleatorias salen iguales en cada visita. */
+function rng(seed) {
+  return () => {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+/** Coordenadas de un evento dentro del sistema del viewBox. */
+function svgPoint(svg, e) {
+  const pt = svg.createSVGPoint();
+  pt.x = e.clientX; pt.y = e.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+/* ═══ Fórmulas ═════════════════════════════════════════════════════════ */
+document.querySelectorAll("[data-tex]").forEach(el => {
+  try { katex.render(el.dataset.tex, el, { displayMode: true, throwOnError: false }); }
+  catch (e) { el.textContent = el.dataset.tex; }
+});
+
+/* ═══ Navegación: pasos, progreso, modo, revelado ════════════════════ */
+const STAGES = [
+  ["s1", "i-data", "Limpiar datos", "#3d434d"], ["s2", "i-road", "Enganchar a la red", "#3d434d"],
+  ["s3", "i-heat", "Densidad", C.crime], ["s4", "i-peak", "Zonas", C.crime],
+  ["s5", "i-dice", "¿Azar?", C.crime], ["s6", "i-shape", "Forma", C.hs],
+  ["s7", "i-angle", "Similitud", C.hs], ["s8", "i-time", "Tiempo", C.hs],
+  ["s9", "i-twin", "Gemelos", C.poi], ["s10", "i-check", "Validación", C.poi]
+];
+$("steps").innerHTML = STAGES.map(([id, , name], i) =>
+  `<a href="#${id}" title="${i + 1}. ${name}">${i + 1}</a>`).join("");
+$("flow").innerHTML = STAGES.map(([id, ic, name, col], i) =>
+  `<a class="flow-step" href="#${id}" style="--i:${i}"><span class="ic" style="color:${col}"><svg><use href="#${ic}"/></svg></span>` +
+  `<i>${String(i + 1).padStart(2, "0")}</i><small>${name}</small></a>`).join("");
+
+const stepLinks = [...document.querySelectorAll("#steps a")];
+const sections = STAGES.map(([id]) => $(id));
+function onScroll() {
+  const h = document.documentElement;
+  $("progress").style.width = (h.scrollTop / Math.max(1, h.scrollHeight - h.clientHeight) * 100) + "%";
+  const y = h.scrollTop + window.innerHeight * .35;
+  let cur = -1;
+  sections.forEach((s, i) => { if (s.offsetTop <= y) cur = i; });
+  stepLinks.forEach((a, i) => { a.classList.toggle("on", i === cur); a.classList.toggle("done", i < cur); });
+}
+window.addEventListener("scroll", onScroll, { passive: true });
+onScroll();
+
+const io = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+}), { threshold: .12 });
+document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+
+function setMode(m) {
+  document.querySelectorAll(".mode button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === m)));
+  document.querySelectorAll("details.tech").forEach(d => { d.open = m === "tech"; });
+  try { localStorage.setItem("howtoMode", m); } catch (e) {}
+}
+document.querySelectorAll(".mode button").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
+let savedMode = null;
+try { savedMode = localStorage.getItem("howtoMode"); } catch (e) {}
+if (savedMode === "tech") setMode("tech");
+
+/** Ejecuta `fn` la primera vez que `el` entra en pantalla: las animaciones de
+ *  entrada no tienen gracia si ocurren fuera de la vista. */
+function whenVisible(el, fn) {
+  const o = new IntersectionObserver(es => {
+    if (es.some(e => e.isIntersecting)) { o.disconnect(); fn(); }
+  }, { threshold: .25 });
+  o.observe(el);
+}
+
+/* ═══ Cifras: se leen de los artefactos, no se escriben a mano ════════ */
+const K = {};
+function bind() {
+  document.querySelectorAll("[data-k]").forEach(el => {
+    if (K[el.dataset.k] !== undefined) el.textContent = K[el.dataset.k];
+  });
+}
+async function getJSON(url) {
+  try { const r = await fetch(url); return r.ok ? await r.json() : null; }
+  catch (e) { return null; }
+}
+
+(async function loadData() {
+  const idx = await getJSON("data/datasets.json");
+  const ds = idx && (idx.datasets.find(d => d.id === idx.default) || idx.datasets[0]);
+  if (!ds) return;
+  const base = "data/" + ds.dir + "/";
+  const [val, ev, bench, cs] = await Promise.all(
+    ["validation_report.json", "evaluation.json", "benchmark.json", "casestudies.json"]
+      .map(f => getJSON(base + f)));
+
+  K.months = ds.months;
+  const [w0, w1] = String(ds.window || "").split(" .. ");
+  if (w0 && w1) K.window = `${w0.replace("-", "/")} – ${w1.replace("-", "/")}`;
+
+  if (val) {
+    K.total = fmtN(val.total_rows); K.kept = fmtN(val.kept_rows);
+    K.recovered = fmtN(val.recovered_rows);
+    K.colsKept = val.columns_kept.length; K.colsIn = val.columns_in.length;
+    if (val.fallback_points && val.fallback_points[0]) K.fb0rows = fmtN(val.fallback_points[0].rows);
+    const ho = val.geocoding && val.geocoding.holdout;
+    if (ho) K.hoP50 = comma(ho.p50_m);
+    drawFunnel(val);
+  }
+  if (ev) {
+    const m = ev.meta, t = ev.methods.topo;
+    K.nodes = fmtN(m.network.nodes); K.edges = fmtN(m.network.edges);
+    K.snapped = fmtN(m.crimes_snapped);
+    K.hotspots = fmtN(t.hotspots);
+    K.sigma = m.params.sigma_m + " m"; K.alpha = m.params.alpha; K.fmin = m.params.f_min_ratio;
+    K.kmin = m.selection.hotspots_min; K.kmax = m.selection.hotspots_max;
+    K.B = m.selection.replicates; K.alphaSig = m.selection.alpha_sig; K.maxk = m.selection.max_k;
+    // Lift = densidad en las zonas / media de la ciudad por nodo y mes, con la
+    // media redondeada a 4 decimales como la escribe `crimepipe hotspots`
+    // (pipeline/cli.py): así sale la misma cifra que el resto del proyecto.
+    const cityPerNode = +(m.crimes_snapped / m.months / m.network.nodes).toFixed(4);
+    K.lift = comma((+(t.density / cityPerNode).toFixed(2)).toFixed(1)) + "×";
+    drawValidation(ev, bench);
+  }
+  if (bench) {
+    const L = bench.regimes[bench.default_regime || "lima"];
+    K.bParents = L.params.parents; K.bOff = fmtN(L.params.offspring);
+    K.bBg = fmtN(L.params.background); K.bNodes = fmtN(L.params.network.nodes);
+    K.nullSig = L.null_check.significant_max === 0 ? "cero" : L.null_check.significant_max;
+    if (L.sweep) drawSweep(L.sweep, bench.params.sigma_m);
+  }
+  if (cs) {
+    K.traj = fmtN(cs.trajectories.length);
+    K.persSig = fmtN(cs.persistence.n_significant);
+    K.minIou = comma(cs.meta.min_iou); K.maxGap = cs.meta.max_gap;
+    K.buffer = cs.meta.poi_meta.buffer_m;
+    drawPoi(cs);
+  }
+  const cv = (ds.caveats || [])[0];
+  if (cv) { $("cv-title").textContent = cv.label; $("cv-text").textContent = cv.text; }
+  bind();
+})();
+
+/* ═══ 1 · Embudo de limpieza ═══════════════════════════════════════════ */
+function drawFunnel(v) {
+  const sr = v.source_by_reason || {};
+  const steps = [
+    ["Filas en el archivo", v.total_rows, null, "58 columnas; el pipeline usa siete."],
+    ["Mal formadas", v.discarded_rows, "drop", "Sin tipo o sin modalidad: no hay nada que contar."],
+    ["Fuera de alcance o geo forzada", sr.marcada_por_la_fuente, "drop",
+     "Delitos que no ocurren en la vía pública (sobre todo violencia intrafamiliar, que se geocodifica a la vivienda) y filas marcadas «geo forzada al centroide»."],
+    ["Centroides de relleno", sr.centroide_de_relleno, "drop",
+     "Puntos que acumulan cientos de filas con cientos de direcciones distintas: la ubicación es de relleno."],
+    ["Duplicadas", v.duplicate_rows, "drop", "Misma denuncia, mismo subtipo y misma modalidad."],
+    ["Anteriores a 2018", v.filtered_rows, "drop", "Errores de digitación en la fecha (hay hechos fechados en 1923)."],
+    ["Retenidas", v.kept_rows, "keep", `Incluye ${fmtN(v.recovered_rows)} recuperadas por su dirección.`]
+  ].filter(s => s[1] !== undefined);
+
+  const svg = d3.select("#funnel"), W = 620, rowH = 38, L = 200, R = 86;
+  svg.attr("viewBox", `0 0 ${W} ${steps.length * rowH + 8}`);
+  const x = d3.scaleLinear().domain([0, v.total_rows]).range([0, W - L - R]);
+  let remaining = v.total_rows;
+  const rows = steps.map(([label, n, kind, note]) => {
+    const r = { label, n, kind, note, before: remaining };
+    if (kind === "drop") remaining -= n;
+    r.after = kind === "drop" ? remaining : n;
+    return r;
+  });
+  const g = svg.selectAll("g.row").data(rows).join("g").attr("class", "row")
+    .attr("transform", (_, i) => `translate(0,${i * rowH + 4})`).style("cursor", "default");
+  g.append("rect").attr("x", 0).attr("width", W).attr("height", rowH - 4).attr("rx", 8)
+    .attr("fill", "transparent").attr("class", "hit");
+  g.append("text").attr("x", L - 12).attr("y", rowH / 2 + 2).attr("text-anchor", "end")
+    .attr("font-size", 12.5).attr("font-weight", d => d.kind === "keep" || !d.kind ? 700 : 500)
+    .attr("fill", d => d.kind === "drop" ? C.muted : C.ink).text(d => d.label);
+  // Lo que queda (gris) y lo que se quita en este paso (rojo) o se queda (verde).
+  g.append("rect").attr("class", "rest").attr("x", L).attr("y", 8).attr("height", rowH - 20).attr("rx", 4)
+    .attr("fill", d => d.kind === "keep" ? C.poi : "#d7dbe1").attr("width", 0);
+  g.filter(d => d.kind === "drop").append("rect").attr("class", "cut")
+    .attr("y", 8).attr("height", rowH - 20).attr("rx", 4).attr("fill", C.crime).attr("fill-opacity", .85)
+    .attr("x", d => L + x(d.after)).attr("width", 0);
+  g.append("text").attr("class", "n").attr("y", rowH / 2 + 2).attr("font-size", 12.5).attr("font-weight", 650)
+    .attr("fill", d => d.kind === "drop" ? C.crimeDeep : d.kind === "keep" ? "#087f5b" : C.ink)
+    .attr("x", W - R + 8).text(d => (d.kind === "drop" ? "−" : "") + fmtN(d.n));
+
+  whenVisible($("funnel"), () => {
+    g.select(".rest").transition().delay((_, i) => i * 140).duration(700)
+      .attr("width", d => Math.max(1, x(d.kind === "drop" ? d.after : d.n)));
+    g.select(".cut").transition().delay((_, i) => i * 140 + 300).duration(600)
+      .attr("width", d => Math.max(1.5, x(d.n)));
+  });
+  g.on("mouseenter", function (e, d) {
+      d3.select(this).select(".hit").attr("fill", C.soft);
+      $("funnel-read").innerHTML = `<b>${d.label}</b> · ${fmtN(d.n)} filas` +
+        (d.kind === "drop" ? ` (${pct(d.n / v.total_rows)} del archivo)` : "") + `<br>${d.note}`;
+    })
+   .on("mouseleave", function () { d3.select(this).select(".hit").attr("fill", "transparent"); });
+}
+
+/* ═══ 2 · Snapping ═════════════════════════════════════════════════════ */
+(function snapDemo() {
+  // Dos calles paralelas: la de arriba tiene una cuadra muy larga, la de abajo
+  // esquinas frecuentes. A mitad de la cuadra larga, la esquina más cercana en
+  // línea recta está en la calle de abajo: es el error que se evita.
+  const N = { A: [50, 100], B: [510, 100], C: [50, 200], D: [190, 200], E: [330, 200], F: [510, 200],
+              G: [190, 295], H: [330, 295] };
+  const E = [["A", "B"], ["C", "D"], ["D", "E"], ["E", "F"], ["A", "C"], ["B", "F"], ["D", "G"], ["E", "H"], ["G", "H"]];
+  const svg = d3.select("#snap"), node = svg.node();
+  svg.append("rect").attr("width", 560).attr("height", 330).attr("fill", "#fafbfc");
+  // Manzanas
+  const blocks = [[62, 112, 436, 76], [62, 212, 116, 72], [202, 212, 116, 72], [342, 212, 156, 110]];
+  svg.selectAll("rect.blk").data(blocks).join("rect").attr("class", "blk")
+    .attr("x", d => d[0]).attr("y", d => d[1]).attr("width", d => d[2]).attr("height", d => d[3])
+    .attr("rx", 6).attr("fill", "#eef0f3");
+  const eg = svg.append("g");
+  eg.selectAll("line").data(E).join("line")
+    .attr("x1", d => N[d[0]][0]).attr("y1", d => N[d[0]][1]).attr("x2", d => N[d[1]][0]).attr("y2", d => N[d[1]][1])
+    .attr("stroke", "#c9ced6").attr("stroke-width", 9).attr("stroke-linecap", "round");
+  svg.append("text").attr("x", 280).attr("y", 90).attr("text-anchor", "middle").attr("font-size", 11)
+    .attr("fill", C.muted).text("Av. de una sola cuadra larga");
+  svg.append("text").attr("x", 260).attr("y", 225).attr("text-anchor", "middle").attr("font-size", 11)
+    .attr("fill", C.muted).text("calle de atrás");
+  const hiEdge = svg.append("line").attr("stroke", C.hs).attr("stroke-width", 9).attr("stroke-linecap", "round").attr("stroke-opacity", .35);
+  const naive = svg.append("line").attr("stroke", C.muted).attr("stroke-width", 1.6).attr("stroke-dasharray", "4 4");
+  const perp = svg.append("line").attr("stroke", C.hs).attr("stroke-width", 1.6).attr("stroke-dasharray", "3 3");
+  const toNode = svg.append("line").attr("stroke", C.poi).attr("stroke-width", 2.4).attr("marker-end", "url(#arr)");
+  svg.append("defs").append("marker").attr("id", "arr").attr("viewBox", "0 0 10 10").attr("refX", 8).attr("refY", 5)
+    .attr("markerWidth", 7).attr("markerHeight", 7).attr("orient", "auto-start-reverse")
+    .append("path").attr("d", "M0 0L10 5L0 10z").attr("fill", C.poi);
+  const ng = svg.append("g");
+  ng.selectAll("circle").data(Object.entries(N)).join("circle")
+    .attr("cx", d => d[1][0]).attr("cy", d => d[1][1]).attr("r", 7).attr("fill", "#fff")
+    .attr("stroke", C.ink2).attr("stroke-width", 2);
+  const proj = svg.append("circle").attr("r", 4).attr("fill", C.hs);
+  const pt = svg.append("circle").attr("r", 9).attr("fill", C.crime).attr("stroke", "#fff").attr("stroke-width", 2.5)
+    .style("cursor", "grab").attr("filter", "drop-shadow(0 2px 3px rgba(0,0,0,.25))");
+  let P = [300, 118];
+
+  function update() {
+    let best = null;
+    for (const [a, b] of E) {
+      const [ax, ay] = N[a], [bx, by] = N[b];
+      const dx = bx - ax, dy = by - ay;
+      const t = Math.max(0, Math.min(1, ((P[0] - ax) * dx + (P[1] - ay) * dy) / (dx * dx + dy * dy)));
+      const q = [ax + t * dx, ay + t * dy];
+      const d = Math.hypot(P[0] - q[0], P[1] - q[1]);
+      if (!best || d < best.d) best = { a, b, q, d, t };
+    }
+    const chosen = Math.hypot(best.q[0] - N[best.a][0], best.q[1] - N[best.a][1]) <=
+                   Math.hypot(best.q[0] - N[best.b][0], best.q[1] - N[best.b][1]) ? best.a : best.b;
+    const nearest = Object.keys(N).reduce((m, k) =>
+      Math.hypot(P[0] - N[k][0], P[1] - N[k][1]) < Math.hypot(P[0] - N[m][0], P[1] - N[m][1]) ? k : m);
+    hiEdge.attr("x1", N[best.a][0]).attr("y1", N[best.a][1]).attr("x2", N[best.b][0]).attr("y2", N[best.b][1]);
+    perp.attr("x1", P[0]).attr("y1", P[1]).attr("x2", best.q[0]).attr("y2", best.q[1]);
+    proj.attr("cx", best.q[0]).attr("cy", best.q[1]);
+    const tn = N[chosen], len = Math.hypot(tn[0] - best.q[0], tn[1] - best.q[1]) || 1;
+    toNode.attr("x1", best.q[0]).attr("y1", best.q[1])
+      .attr("x2", tn[0] - (tn[0] - best.q[0]) / len * 10).attr("y2", tn[1] - (tn[1] - best.q[1]) / len * 10);
+    naive.attr("x1", P[0]).attr("y1", P[1]).attr("x2", N[nearest][0]).attr("y2", N[nearest][1])
+      .style("display", nearest === chosen ? "none" : null);
+    ng.selectAll("circle").attr("fill", d => d[0] === chosen ? C.poi : d[0] === nearest && nearest !== chosen ? "#dfe3e8" : "#fff")
+      .attr("stroke", d => d[0] === chosen ? C.poi : C.ink2).attr("r", d => d[0] === chosen ? 9 : 7);
+    pt.attr("cx", P[0]).attr("cy", P[1]);
+    const onSameStreet = nearest === best.a || nearest === best.b;
+    $("snap-read").innerHTML =
+      `Calle más cercana: <b>${best.a}–${best.b}</b> a ${fmtD(best.d * .5, 0)} m (proyección en t* = ${comma(fmtD(best.t))}). ` +
+      `Se asigna a la esquina <b style="color:#087f5b">${chosen}</b>.<br>` +
+      (nearest === chosen
+        ? `<span class="ok">✓ Coincide con la esquina más cercana en línea recta.</span>`
+        : onSameStreet
+          ? `<span class="ok">La esquina en línea recta (${nearest}) es de la misma calle: aquí da igual.</span>`
+          : `<span class="bad">✗ En línea recta ganaría ${nearest}, que está en otra calle: el delito se contaría en la calle equivocada.</span>`);
+  }
+  const drag = d3.drag()
+    .on("start", () => pt.style("cursor", "grabbing"))
+    .on("drag", e => { const p = svgPoint(node, e.sourceEvent); P = [Math.max(10, Math.min(550, p.x)), Math.max(10, Math.min(320, p.y))]; update(); })
+    .on("end", () => pt.style("cursor", "grab"));
+  pt.call(drag);
+  svg.on("click", e => { if (e.defaultPrevented) return; const p = svgPoint(node, e); P = [p.x, p.y]; update(); });
+  update();
+})();
+
+/* ═══ 3 · Densidad geodésica ═══════════════════════════════════════════ */
+(function densDemo() {
+  const COLS = 9, ROWS = 6, SP = 80;          // una cuadra = 80 m
+  const X0 = 40, Y0 = 36, PX = 60;            // px por cuadra
+  const RIVER = 4;                            // el río corre entre la columna 4 y la 5
+  const BRIDGE = 0;                           // único puente, en la fila 0
+  const id = (c, r) => r * COLS + c;
+  const nodes = [];
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
+    nodes.push({ c, r, x: X0 + c * PX + (c > RIVER ? 26 : 0), y: Y0 + r * PX * .92, mx: c * SP + (c > RIVER ? 40 : 0), my: r * SP * .92 });
+  const adj = nodes.map(() => []);
+  const edges = [];
+  const link = (a, b) => {
+    const w = Math.hypot(nodes[a].mx - nodes[b].mx, nodes[a].my - nodes[b].my);
+    adj[a].push([b, w]); adj[b].push([a, w]); edges.push([a, b]);
+  };
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    if (c + 1 < COLS && (c !== RIVER || r === BRIDGE)) link(id(c, r), id(c + 1, r));
+    if (r + 1 < ROWS) link(id(c, r), id(c, r + 1));
+  }
+  const INIT = { [id(3, 3)]: 6, [id(4, 3)]: 5, [id(4, 4)]: 3, [id(3, 4)]: 2, [id(7, 1)]: 4, [id(1, 1)]: 2 };
+  let cnt = new Array(nodes.length).fill(0);
+  const reset = () => { cnt.fill(0); for (const k in INIT) cnt[k] = INIT[k]; };
+  reset();
+  let sigma = 120, metric = "geo";
+
+  function dijkstra(src, cutoff) {
+    const dist = new Map([[src, 0]]), done = new Set();
+    const pq = [[0, src]];
+    while (pq.length) {
+      pq.sort((a, b) => a[0] - b[0]);
+      const [d, u] = pq.shift();
+      if (done.has(u)) continue;
+      done.add(u);
+      for (const [v, w] of adj[u]) {
+        const nd = d + w;
+        if (nd <= cutoff && nd < (dist.get(v) ?? Infinity)) { dist.set(v, nd); pq.push([nd, v]); }
+      }
+    }
+    return dist;
+  }
+  function field() {
+    const f = new Array(nodes.length).fill(0), r = 3 * sigma;
+    nodes.forEach((s, si) => {
+      if (!cnt[si]) return;
+      if (metric === "geo") {
+        for (const [v, d] of dijkstra(si, r)) f[v] += cnt[si] * Math.exp(-d * d / (2 * sigma * sigma));
+      } else {
+        nodes.forEach((t, v) => {
+          const d = Math.hypot(s.mx - t.mx, s.my - t.my);
+          if (d <= r) f[v] += cnt[si] * Math.exp(-d * d / (2 * sigma * sigma));
+        });
+      }
+    });
+    return f;
+  }
+
+  const svg = d3.select("#dens");
+  const riverX = (nodes[id(RIVER, 0)].x + nodes[id(RIVER + 1, 0)].x) / 2;
+  svg.append("rect").attr("x", riverX - 16).attr("y", 0).attr("width", 32).attr("height", 360)
+    .attr("fill", C.water).attr("fill-opacity", .22);
+  svg.append("text").attr("x", riverX).attr("y", 352).attr("text-anchor", "middle").attr("font-size", 10.5)
+    .attr("font-weight", 650).attr("fill", "#1c7ed6").text("RÍO");
+  svg.append("text").attr("x", riverX).attr("y", 22).attr("text-anchor", "middle").attr("font-size", 10)
+    .attr("fill", "#1c7ed6").text("puente");
+  const eSel = svg.append("g").selectAll("line").data(edges).join("line")
+    .attr("x1", d => nodes[d[0]].x).attr("y1", d => nodes[d[0]].y)
+    .attr("x2", d => nodes[d[1]].x).attr("y2", d => nodes[d[1]].y)
+    .attr("stroke-linecap", "round");
+  const nSel = svg.append("g").selectAll("g").data(nodes).join("g")
+    .attr("transform", d => `translate(${d.x},${d.y})`).style("cursor", "pointer");
+  nSel.append("circle").attr("class", "halo");
+  nSel.append("circle").attr("class", "core").attr("r", 5).attr("stroke", "#fff").attr("stroke-width", 1.5);
+  nSel.append("text").attr("class", "cnt").attr("text-anchor", "middle").attr("dy", -12)
+    .attr("font-size", 10.5).attr("font-weight", 700).attr("fill", C.crimeDeep);
+  const heat = d3.scaleSequential(t => d3.interpolateRgb("#f1f3f5", C.crime)(Math.pow(t, .8)));
+
+  // Nodo testigo: el primero al otro lado del río frente al foco.
+  const WIT = id(RIVER + 1, 3), SRC = id(RIVER, 3);
+  const wit = svg.append("circle").attr("r", 15).attr("fill", "none").attr("stroke", C.hs)
+    .attr("stroke-width", 1.5).attr("stroke-dasharray", "3 3")
+    .attr("cx", nodes[WIT].x).attr("cy", nodes[WIT].y);
+
+  function paint() {
+    const f = field(), max = d3.max(f) || 1;
+    heat.domain([0, max]);
+    eSel.attr("stroke", d => heat((f[d[0]] + f[d[1]]) / 2)).attr("stroke-width", d => 3 + 7 * ((f[d[0]] + f[d[1]]) / 2 / max));
+    nSel.select(".halo").attr("r", d => 5 + 12 * Math.sqrt(f[nodes.indexOf(d)] / max))
+      .attr("fill", C.crime).attr("fill-opacity", d => .18 * f[nodes.indexOf(d)] / max);
+    nSel.select(".core").attr("fill", (d, i) => cnt[i] ? C.crimeDeep : heat(f[i]));
+    nSel.select(".cnt").text((d, i) => cnt[i] ? cnt[i] : "");
+    const geoF = metric === "geo" ? f[WIT] : null;
+    const saveM = metric; metric = metric === "geo" ? "euc" : "geo";
+    const other = field(); metric = saveM;
+    const g = saveM === "geo" ? f[WIT] : other[WIT], eu = saveM === "geo" ? other[WIT] : f[WIT];
+    $("dens-read").innerHTML =
+      `Esquina marcada, al otro lado del río: <b>f = ${comma(fmtD(g, 2))}</b> por calles · <b>${comma(fmtD(eu, 2))}</b> en línea recta. ` +
+      (eu > g * 1.5 + .05
+        ? `<span class="bad">En línea recta el calor salta el río; por calles tiene que dar la vuelta por el puente.</span>`
+        : `Con este σ la diferencia es pequeña.`) +
+      `<br>Radio de corte r = 3σ = <b>${3 * sigma} m</b> ≈ ${comma(fmtD(3 * sigma / SP, 1))} cuadras.`;
+  }
+  nSel.on("click", (e, d) => {
+    const i = nodes.indexOf(d);
+    cnt[i] = Math.max(0, cnt[i] + (e.shiftKey ? -1 : 1));
+    paint();
+  });
+  $("dens-s").addEventListener("input", e => { sigma = +e.target.value; $("dens-s-o").textContent = sigma + " m"; paint(); });
+  document.querySelectorAll("#dens-metric button").forEach(b => b.addEventListener("click", () => {
+    metric = b.dataset.m;
+    document.querySelectorAll("#dens-metric button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    paint();
+  }));
+  $("dens-reset").addEventListener("click", () => { reset(); paint(); });
+  paint();
+})();
+
+/* ═══ 4 · Persistencia ═════════════════════════════════════════════════ */
+(function persDemo() {
+  const NS = 280;
+  const PEAKS = [[.12, .55, .05], [.33, 1, .07], [.52, .72, .045], [.6, .62, .03], [.84, .48, .06]];
+  const f = d3.range(NS).map(i => {
+    const x = i / (NS - 1);
+    return .04 + PEAKS.reduce((s, [m, h, w]) => s + h * Math.exp(-((x - m) ** 2) / (2 * w * w)), 0);
+  });
+  const fmax = d3.max(f);
+  const fn = f.map(v => v / fmax);
+  const COLORS = [C.crime, C.hs, C.poi, C.emb, "#f08c00", "#0b7285"];
+
+  /** Barrido descendente con union-find sobre el camino 1D. Devuelve la rama
+   *  de cada muestra, los picos y, por cada pico que muere, su silla. */
+  function sweep(fminR) {
+    const order = d3.range(NS).sort((a, b) => fn[b] - fn[a]);
+    const parent = new Array(NS).fill(-1), branch = new Array(NS).fill(-1);
+    const find = a => { while (parent[a] !== a) a = parent[a] = parent[parent[a]]; return a; };
+    const peakOfRoot = new Map(), peaks = [], deaths = new Map();
+    for (const i of order) {
+      if (fn[i] < fminR) break;
+      parent[i] = i;
+      const nb = [i - 1, i + 1].filter(j => j >= 0 && j < NS && parent[j] !== -1).map(find);
+      const roots = [...new Set(nb)];
+      if (!roots.length) { peakOfRoot.set(i, i); peaks.push(i); branch[i] = i; continue; }
+      roots.sort((a, b) => fn[peakOfRoot.get(b)] - fn[peakOfRoot.get(a)]);
+      const hi = roots[0];
+      branch[i] = peakOfRoot.get(hi);
+      for (const r of roots) parent[r] = i;
+      peakOfRoot.set(i, peakOfRoot.get(hi));
+      for (const r of roots.slice(1)) deaths.set(peakOfRoot.get(r), { saddle: i, into: peakOfRoot.get(hi) });
+    }
+    return { branch, peaks, deaths };
+  }
+
+  const svg = d3.select("#pers"), W = 560, H = 300, L = 30, R = 12, T = 20, B = 30;
+  const x = d3.scaleLinear().domain([0, NS - 1]).range([L, W - R]);
+  const y = d3.scaleLinear().domain([0, 1.08]).range([H - B, T]);
+  const gFill = svg.append("g"), gWater = svg.append("rect"), gLine = svg.append("path");
+  const gFmin = svg.append("line"), gFminT = svg.append("text"), gPers = svg.append("g"), gLvl = svg.append("text");
+  svg.append("line").attr("x1", L).attr("x2", W - R).attr("y1", H - B).attr("y2", H - B).attr("stroke", C.line);
+  svg.append("text").attr("x", L).attr("y", H - 9).attr("font-size", 10.5).attr("fill", C.muted)
+    .text("recorrido a lo largo de las calles →");
+  svg.append("text").attr("transform", `translate(12,${(T + H - B) / 2}) rotate(-90)`).attr("text-anchor", "middle")
+    .attr("font-size", 10.5).attr("fill", C.muted).text("densidad f");
+
+  let level = .6, alpha = .3, fminR = .1, playT = null;
+  function paint() {
+    const { branch, peaks, deaths } = sweep(fminR);
+    const tau = alpha;                       // fn está normalizada: max = 1
+    // Resolver absorciones: un pico con π < τ pasa su rama al que lo absorbió.
+    const pi = new Map(peaks.map(p => [p, deaths.has(p) ? fn[p] - fn[deaths.get(p).saddle] : fn[p]]));
+    const resolve = p => { while (deaths.has(p) && pi.get(p) < tau) p = deaths.get(p).into; return p; };
+    const surv = peaks.filter(p => resolve(p) === p);
+    const col = new Map(surv.map((p, i) => [p, COLORS[i % COLORS.length]]));
+
+    const shown = d3.range(NS).filter(i => branch[i] >= 0 && fn[i] >= level);
+    gFill.selectAll("line").data(d3.range(NS)).join("line")
+      .attr("x1", i => x(i)).attr("x2", i => x(i)).attr("y1", H - B).attr("y2", i => y(fn[i]))
+      .attr("stroke-width", (W - L - R) / NS + .6)
+      .attr("stroke", i => branch[i] < 0 ? "#eceef1" : fn[i] >= level ? col.get(resolve(branch[i])) : "#e3e7ec")
+      .attr("stroke-opacity", i => branch[i] >= 0 && fn[i] >= level ? .85 : 1);
+    gLine.attr("d", d3.line().x((_, i) => x(i)).y(v => y(v))(fn)).attr("fill", "none").attr("stroke", C.ink2).attr("stroke-width", 1.6);
+    gWater.attr("x", L).attr("width", W - L - R).attr("y", y(Math.min(level, 1.08))).attr("height", Math.max(0, H - B - y(Math.min(level, 1.08))))
+      .attr("fill", C.water).attr("fill-opacity", .28);
+    gLvl.attr("x", W - R - 4).attr("y", y(Math.min(level, 1.08)) - 5).attr("text-anchor", "end").attr("font-size", 10.5)
+      .attr("fill", "#1c7ed6").attr("font-weight", 650).text(level <= 1.04 ? "nivel del agua" : "");
+    gFmin.attr("x1", L).attr("x2", W - R).attr("y1", y(fminR)).attr("y2", y(fminR))
+      .attr("stroke", C.ink2).attr("stroke-dasharray", "5 4").attr("stroke-width", 1.2);
+    gFminT.attr("x", L + 4).attr("y", y(fminR) - 4).attr("font-size", 10).attr("fill", C.ink2).text("f_min");
+
+    // Persistencia: barra vertical de la silla al pico, rayada si se absorbe.
+    const bars = peaks.map(p => ({ p, lo: deaths.has(p) ? fn[deaths.get(p).saddle] : 0, keep: resolve(p) === p }));
+    const pg = gPers.selectAll("g").data(bars, d => d.p).join(enter => {
+      const g = enter.append("g");
+      g.append("line"); g.append("circle"); g.append("text");
+      return g;
+    });
+    pg.select("line").attr("x1", d => x(d.p)).attr("x2", d => x(d.p)).attr("y1", d => y(d.lo)).attr("y2", d => y(fn[d.p]))
+      .attr("stroke", d => d.keep ? C.ink : C.muted).attr("stroke-width", 2).attr("stroke-dasharray", d => d.keep ? null : "3 3");
+    pg.select("circle").attr("cx", d => x(d.p)).attr("cy", d => y(fn[d.p])).attr("r", 4.5)
+      .attr("fill", d => d.keep ? col.get(d.p) : "#fff").attr("stroke", d => d.keep ? "#fff" : C.muted).attr("stroke-width", 1.5);
+    pg.select("text").attr("x", d => x(d.p) + (d.keep ? 0 : -7)).attr("y", d => y(fn[d.p]) - (d.keep ? 9 : -4)).attr("text-anchor", d => d.keep ? "middle" : "end")
+      .attr("font-size", 10.5).attr("font-weight", 650).attr("fill", d => d.keep ? C.ink : C.muted)
+      .text(d => "π=" + comma(fmtD(d.lo ? fn[d.p] - d.lo : fn[d.p], 2)));
+
+    const islands = new Set(shown.map(i => resolve(branch[i]))).size;
+    $("pers-l-o").textContent = comma(fmtD(Math.min(level, 1), 2));
+    $("pers-a-o").textContent = comma(fmtD(alpha, 2));
+    $("pers-f-o").textContent = comma(fmtD(fminR, 2));
+    $("pers-read").innerHTML =
+      `<b>${peaks.length}</b> cumbres, <b>${surv.length}</b> sobreviven a τ = α·max f = <b>${comma(fmtD(tau, 2))}</b>. ` +
+      `Con el agua en ${comma(fmtD(Math.min(level, 1), 2))} asoman <b>${islands}</b> ${islands === 1 ? "isla" : "islas"}. ` +
+      (surv.length < peaks.length ? `Las barras rayadas son picos que se absorben: sobresalen menos de τ sobre su silla.` : "");
+  }
+  const sync = () => { $("pers-l").value = level; paint(); };
+  $("pers-l").addEventListener("input", e => { stop(); level = +e.target.value; paint(); });
+  $("pers-a").addEventListener("input", e => { alpha = +e.target.value; paint(); });
+  $("pers-f").addEventListener("input", e => { fminR = +e.target.value; paint(); });
+  function stop() { if (playT) { playT.stop(); playT = null; $("pers-play").textContent = "▶ Bajar el agua"; } }
+  $("pers-play").addEventListener("click", () => {
+    if (playT) return stop();
+    if (level <= .01 || level >= .6) level = 1.05;
+    $("pers-play").textContent = "❚❚ Pausa";
+    const from = level, t0 = performance.now(), dur = 5200 * from;
+    playT = d3.timer(() => {
+      const k = Math.min(1, (performance.now() - t0) / dur);
+      level = from * (1 - k); sync();
+      if (k >= 1) stop();
+    });
+  });
+  paint();
+})();
+
+/* ═══ 5 · Monte Carlo ══════════════════════════════════════════════════ */
+(function mcDemo() {
+  const G = 12, N = 150, WZ = 3;              // rejilla 12×12, ventana 3×3
+  const Zfrac = WZ * WZ / (G * G), lam = N * Zfrac;
+  const llr = nz => nz <= lam ? 0 : nz * Math.log(nz / lam) + (N - nz) * Math.log((N - nz) / (N - lam));
+  function maxScan(cells) {
+    let best = { v: -1 };
+    for (let r = 0; r <= G - WZ; r++) for (let c = 0; c <= G - WZ; c++) {
+      let s = 0;
+      for (let i = 0; i < WZ; i++) for (let j = 0; j < WZ; j++) s += cells[(r + i) * G + c + j];
+      if (s > best.v) best = { v: s, r, c };
+    }
+    return { ...best, L: llr(best.v) };
+  }
+  function observed(k) {
+    const R = rng(7), cells = new Array(G * G).fill(0);
+    for (let i = 0; i < N - k; i++) cells[Math.floor(R() * G * G)]++;
+    for (let i = 0; i < k; i++) cells[(6 + Math.floor(R() * 3)) * G + 2 + Math.floor(R() * 3)]++;
+    return cells;
+  }
+  let seed = 101;
+  function replicate() {
+    const R = rng(seed++), cells = new Array(G * G).fill(0);
+    for (let i = 0; i < N; i++) cells[Math.floor(R() * G * G)]++;
+    return cells;
+  }
+
+  const svg = d3.select("#mc"), CS = 20, GX = 14, GY = 22;
+  svg.append("text").attr("x", GX).attr("y", 14).attr("font-size", 11).attr("font-weight", 650).attr("fill", C.ink2).attr("class", "gtitle");
+  const cellsG = svg.append("g").attr("transform", `translate(${GX},${GY})`);
+  const box = cellsG.append("rect").attr("fill", "none").attr("stroke", C.ink).attr("stroke-width", 2.5).attr("rx", 3);
+  const HX = 290, HW = 272, HY = 30, HH = 200;
+  const hg = svg.append("g").attr("transform", `translate(${HX},0)`);
+  hg.append("text").attr("x", 0).attr("y", 14).attr("font-size", 11).attr("font-weight", 650).attr("fill", C.ink2)
+    .text("Máximo Λ de cada réplica al azar");
+  const hx = d3.scaleLinear().range([0, HW]), hy = d3.scaleLinear().range([HY + HH, HY]);
+  const axG = hg.append("g").attr("transform", `translate(0,${HY + HH})`);
+  const barsG = hg.append("g");
+  const obsL = hg.append("line").attr("stroke", C.crime).attr("stroke-width", 2.5);
+  const obsT = hg.append("text").attr("font-size", 11).attr("font-weight", 700).attr("fill", C.crime).attr("text-anchor", "middle");
+  hg.append("text").attr("x", HW / 2).attr("y", HY + HH + 32).attr("text-anchor", "middle").attr("font-size", 10.5)
+    .attr("fill", C.muted).text("Λ (log-razón de verosimilitud)");
+
+  let k = 18, obs = observed(k), obsScan = maxScan(obs), nulls = [], showing = "obs", lastRep = null;
+  function drawGrid(cells, scan, title) {
+    const mx = d3.max(cells) || 1;
+    cellsG.selectAll("rect.c").data(cells).join("rect").attr("class", "c")
+      .attr("x", (_, i) => (i % G) * CS).attr("y", (_, i) => Math.floor(i / G) * CS)
+      .attr("width", CS - 2).attr("height", CS - 2).attr("rx", 3)
+      .transition().duration(250)
+      .attr("fill", v => v ? d3.interpolateRgb("#fde2e6", C.crimeDeep)(Math.min(1, v / Math.max(6, mx))) : "#f1f3f5");
+    box.transition().duration(250).attr("x", scan.c * CS - 2).attr("y", scan.r * CS - 2)
+      .attr("width", WZ * CS + 2).attr("height", WZ * CS + 2);
+    svg.select(".gtitle").text(title);
+  }
+  function paint() {
+    const all = nulls.concat([obsScan.L]);
+    hx.domain([0, Math.max(10, d3.max(all) * 1.1)]);
+    axG.call(d3.axisBottom(hx).ticks(6)).call(g => g.selectAll("text").attr("font-size", 10).attr("fill", C.muted))
+       .call(g => g.selectAll("line,path").attr("stroke", C.line));
+    const bins = d3.bin().domain(hx.domain()).thresholds(hx.ticks(24))(nulls);
+    hy.domain([0, Math.max(5, d3.max(bins, b => b.length) || 0)]);
+    barsG.selectAll("rect").data(bins).join("rect")
+      .attr("x", b => hx(b.x0) + .5).attr("width", b => Math.max(0, hx(b.x1) - hx(b.x0) - 1))
+      .attr("fill", C.faint).attr("rx", 1.5)
+      .transition().duration(200).attr("y", b => hy(b.length)).attr("height", b => HY + HH - hy(b.length));
+    obsL.attr("x1", hx(obsScan.L)).attr("x2", hx(obsScan.L)).attr("y1", HY).attr("y2", HY + HH);
+    obsT.attr("x", Math.min(HW - 30, hx(obsScan.L))).attr("y", HY - 4).text("observado");
+    const B = nulls.length, ge = nulls.filter(v => v >= obsScan.L).length;
+    const p = (1 + ge) / (B + 1);
+    $("mc-k-o").textContent = k + " delitos extra";
+    $("mc-read").innerHTML =
+      `Zona observada: <b>${obsScan.v}</b> delitos en 9 esquinas; se esperaban <b>${comma(fmtD(lam, 1))}</b> → Λ = <b>${comma(fmtD(obsScan.L, 1))}</b>.<br>` +
+      (B ? `Réplicas: <b>${B}</b> · superan o igualan lo observado: <b>${ge}</b> · p = (1 + ${ge}) / (${B} + 1) = <b>${comma(fmtD(p, 3))}</b> ` +
+           (p <= .05 ? `<span class="ok">→ significativa (p ≤ 0,05)</span>` : `<span class="bad">→ no significativa</span>`)
+         : `Todavía no hay réplicas: pulsa «Simular 99».`);
+  }
+  const showObs = () => { showing = "obs"; drawGrid(obs, obsScan, `Mes observado · ${N} delitos`); setBtn(); };
+  const setBtn = () => $("mc-obs").setAttribute("aria-pressed", String(showing === "obs"));
+  $("mc-obs").addEventListener("click", showObs);
+  $("mc-one").addEventListener("click", () => {
+    const cells = replicate(), s = maxScan(cells);
+    nulls.push(s.L); showing = "rep"; setBtn();
+    drawGrid(cells, s, `Réplica al azar n.º ${nulls.length} · Λ máx = ${comma(fmtD(s.L, 1))}`); paint();
+  });
+  $("mc-99").addEventListener("click", () => {
+    let i = 0;
+    const tick = () => {
+      for (let j = 0; j < 3 && i < 99; j++, i++) {
+        const cells = replicate(), s = maxScan(cells); nulls.push(s.L); lastRep = [cells, s];
+      }
+      showing = "rep"; setBtn();
+      drawGrid(lastRep[0], lastRep[1], `Réplica al azar n.º ${nulls.length} · Λ máx = ${comma(fmtD(lastRep[1].L, 1))}`);
+      paint();
+      if (i < 99) setTimeout(tick, 40); else setTimeout(showObs, 700);
+    };
+    tick();
+  });
+  $("mc-k").addEventListener("input", e => {
+    k = +e.target.value; obs = observed(k); obsScan = maxScan(obs); showObs(); paint();
+  });
+  showObs(); paint();
+})();
+
+/* ═══ 6 · Forma ════════════════════════════════════════════════════════ */
+(function shapeDemo() {
+  const S = 80; // metros entre esquinas
+  const path = pts => ({ pts, e: pts.slice(1).map((_, i) => [i, i + 1]) });
+  const SHAPES = {
+    recta: { name: "Avenida recta", ...path(d3.range(8).map(i => [i * S, 0])) },
+    ele:   { name: "Esquina en L", ...path([[0, 0], [S, 0], [2 * S, 0], [3 * S, 0], [3 * S, S], [3 * S, 2 * S], [3 * S, 3 * S], [3 * S, 4 * S]]) },
+    damero: (() => {
+      const pts = [], e = [];
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) pts.push([c * S, r * S]);
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+        if (c < 2) e.push([r * 3 + c, r * 3 + c + 1]);
+        if (r < 2) e.push([r * 3 + c, (r + 1) * 3 + c]);
+      }
+      return { name: "Damero", pts, e };
+    })(),
+    rotonda: (() => {
+      const pts = [], e = [];
+      for (let i = 0; i < 6; i++) pts.push([Math.cos(i * Math.PI / 3) * S * .9, Math.sin(i * Math.PI / 3) * S * .9]);
+      for (let i = 0; i < 6; i++) e.push([i, (i + 1) % 6]);
+      [0, 2, 3, 5].forEach(i => { pts.push([pts[i][0] * 2.3, pts[i][1] * 2.3]); e.push([i, pts.length - 1]); });
+      return { name: "Rotonda con ramales", pts, e };
+    })()
+  };
+  function describe({ pts, e }) {
+    const V = pts.length, nE = e.length;
+    const deg = new Array(V).fill(0); e.forEach(([a, b]) => { deg[a]++; deg[b]++; });
+    const len = e.map(([a, b]) => Math.hypot(pts[a][0] - pts[b][0], pts[a][1] - pts[b][1]));
+    const mL = d3.mean(len), cv = d3.deviation(len) / mL || 0;
+    const mx = d3.mean(pts, p => p[0]), my = d3.mean(pts, p => p[1]);
+    const rg = Math.sqrt(d3.mean(pts, p => (p[0] - mx) ** 2 + (p[1] - my) ** 2));
+    const sxx = d3.mean(pts, p => (p[0] - mx) ** 2), syy = d3.mean(pts, p => (p[1] - my) ** 2),
+          sxy = d3.mean(pts, p => (p[0] - mx) * (p[1] - my));
+    const tr = sxx + syy, det = sxx * syy - sxy * sxy, disc = Math.sqrt(Math.max(0, tr * tr / 4 - det));
+    const l1 = tr / 2 + disc, l2 = Math.max(0, tr / 2 - disc);
+    return [
+      ["log |V|", Math.log(V), "conn"], ["log |E|", Math.log(nE), "conn"],
+      ["densidad", 2 * nE / (V * (V - 1)), "conn"], ["grado medio", 2 * nE / V, "conn"],
+      ["grado 1", deg.filter(d => d === 1).length / V, "hist"], ["grado 2", deg.filter(d => d === 2).length / V, "hist"],
+      ["grado 3", deg.filter(d => d === 3).length / V, "hist"], ["grado ≥ 4", deg.filter(d => d >= 4).length / V, "hist"],
+      ["log long. media", Math.log(mL), "geo"], ["CV longitudes", cv, "geo"],
+      ["log radio de giro", Math.log(rg), "geo"], ["elongación", l1 ? Math.sqrt(l2 / l1) : 0, "geo"]
+    ];
+  }
+  const keys = Object.keys(SHAPES);
+  const desc = Object.fromEntries(keys.map(k => [k, describe(SHAPES[k])]));
+  // Min–max por columna sobre el «corpus» de las cuatro formas, como §5.2.
+  const mins = desc[keys[0]].map((_, j) => d3.min(keys, k => desc[k][j][1]));
+  const maxs = desc[keys[0]].map((_, j) => d3.max(keys, k => desc[k][j][1]));
+  let cur = "recta";
+  $("shape-pick").innerHTML = keys.map(k => `<button class="btn" data-s="${k}">${SHAPES[k].name}</button>`).join("");
+  const svg = d3.select("#shape");
+  const feat = d3.select("#shape-feat");
+  feat.html(`<thead><tr><th>rasgo</th><th>normalizado</th><th style="text-align:right">valor</th></tr></thead><tbody></tbody>`);
+  const rows = feat.select("tbody").selectAll("tr").data(desc[cur]).join("tr");
+  rows.append("td").text(d => d[0]);
+  rows.append("td").attr("class", "bar").html(`<div class="track"><i></i></div>`);
+  rows.append("td").attr("class", "v");
+
+  function paint() {
+    document.querySelectorAll("#shape-pick button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.s === cur)));
+    const { pts, e } = SHAPES[cur];
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    const ext = Math.max(d3.max(xs) - d3.min(xs), d3.max(ys) - d3.min(ys)) || 1;
+    const sc = 180 / ext, cx = (d3.max(xs) + d3.min(xs)) / 2, cy = (d3.max(ys) + d3.min(ys)) / 2;
+    const P = p => [130 + (p[0] - cx) * sc, 110 + (p[1] - cy) * sc];
+    svg.selectAll("line").data(e).join("line")
+      .attr("stroke", C.hs).attr("stroke-width", 5).attr("stroke-linecap", "round").attr("stroke-opacity", .55)
+      .transition().duration(400)
+      .attr("x1", d => P(pts[d[0]])[0]).attr("y1", d => P(pts[d[0]])[1])
+      .attr("x2", d => P(pts[d[1]])[0]).attr("y2", d => P(pts[d[1]])[1]);
+    svg.selectAll("circle").data(pts).join("circle").attr("r", 6).attr("fill", "#fff").attr("stroke", C.hsDeep).attr("stroke-width", 2)
+      .transition().duration(400).attr("cx", d => P(d)[0]).attr("cy", d => P(d)[1]);
+    const d = desc[cur];
+    const other = cur === "recta" ? "ele" : cur === "ele" ? "recta" : null;
+    rows.data(d).classed("hl", (r, j) => other && j >= 4 && j <= 7 || (other && j === 11));
+    rows.select(".track i").style("width", (r, j) => (maxs[j] > mins[j] ? (r[1] - mins[j]) / (maxs[j] - mins[j]) : .5) * 100 + "%")
+      .style("background", r => r[2] === "geo" ? C.emb : C.hs);
+    rows.select(".v").text(r => comma(fmtD(r[1], 2)));
+    $("shape-read").innerHTML = other
+      ? `Compara con «${SHAPES[other].name}»: el histograma de grados (filas resaltadas) es <b>idéntico</b>; la elongación ` +
+        `pasa de <b>${comma(fmtD(desc.recta[11][1], 2))}</b> (recta) a <b>${comma(fmtD(desc.ele[11][1], 2))}</b> (L). ` +
+        `Sin el bloque geométrico serían indistinguibles.`
+      : `Barras azules: conectividad. Moradas: geometría en metros. Cada barra va normalizada min–max entre las cuatro formas, como se hace sobre todas las zonas reales.`;
+  }
+  document.querySelectorAll("#shape-pick button").forEach(b => b.addEventListener("click", () => { cur = b.dataset.s; paint(); }));
+  paint();
+})();
+
+(function wlDemo() {
+  // Grafo pequeño: dos esquinas en T unidas por una cuadra, más un ramal.
+  const pts = [[70, 105], [170, 105], [270, 105], [370, 105], [470, 105], [170, 40], [170, 170], [370, 40], [370, 170], [470, 170]];
+  const E = [[0, 1], [1, 2], [2, 3], [3, 4], [1, 5], [1, 6], [3, 7], [3, 8], [4, 9]];
+  const nb = pts.map(() => []); E.forEach(([a, b]) => { nb[a].push(b); nb[b].push(a); });
+  const labels = [pts.map((_, i) => String(nb[i].length))];
+  const dict = [new Map()];
+  for (let t = 1; t <= 2; t++) {
+    const prev = labels[t - 1], raw = pts.map((_, i) => prev[i] + "|" + nb[i].map(j => prev[j]).sort().join(","));
+    const m = new Map(); raw.forEach(s => { if (!m.has(s)) m.set(s, String.fromCharCode(64 + t * 10 + m.size - 9)); });
+    dict.push(m); labels.push(raw.map(s => m.get(s)));
+  }
+  const svg = d3.select("#wl");
+  svg.selectAll("line").data(E).join("line")
+    .attr("x1", d => pts[d[0]][0]).attr("y1", d => pts[d[0]][1]).attr("x2", d => pts[d[1]][0]).attr("y2", d => pts[d[1]][1])
+    .attr("stroke", "#cfd4db").attr("stroke-width", 4).attr("stroke-linecap", "round");
+  const g = svg.selectAll("g.n").data(pts).join("g").attr("class", "n").attr("transform", d => `translate(${d[0]},${d[1]})`);
+  g.append("circle").attr("r", 17).attr("stroke", "#fff").attr("stroke-width", 2.5);
+  g.append("text").attr("text-anchor", "middle").attr("dy", 4.5).attr("font-size", 12.5).attr("font-weight", 700).attr("fill", "#fff");
+  const pal = d3.schemeTableau10;
+  function paint(t) {
+    document.querySelectorAll("#wl-it button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.t === t)));
+    const lab = labels[t], uniq = [...new Set(lab)].sort();
+    const col = l => pal[uniq.indexOf(l) % pal.length];
+    g.select("circle").transition().duration(350).attr("fill", (_, i) => col(lab[i]));
+    g.select("text").text((_, i) => lab[i]);
+    const counts = d3.rollups(labels.slice(0, t + 1).flat(), v => v.length, d => d);
+    const expl = t === 0 ? "Ronda 0: cada esquina se etiqueta con su número de calles (su grado)."
+      : `Ronda ${t}: etiqueta nueva = propia ‖ vecinas ordenadas. Ej.: ` +
+        [...dict[t].entries()].slice(0, 3).map(([k, v]) => `<b>${k.replace("|", " ‖ ")}</b> → <b>${v}</b>`).join(" · ");
+    $("wl-read").innerHTML = `${expl}<div class="wl-doc">` +
+      counts.map(([l, n]) => `<span style="background:${labels[t].includes(l) ? col(l) : C.faint}">${l} ×${n}</span>`).join("") +
+      `</div><div style="font-size:12px;color:${C.muted};margin-top:6px">El «documento» de la zona: la bolsa de todas las etiquetas hasta esta ronda.</div>`;
+  }
+  document.querySelectorAll("#wl-it button").forEach(b => b.addEventListener("click", () => paint(+b.dataset.t)));
+  paint(0);
+})();
+
+(function fuseDemo() {
+  const BL = [["Estructural", 12, 1, C.hs], ["graph2vec", 128, 1, C.emb], ["Jerarquía vial", 6, .5, C.poi]];
+  const svg = d3.select("#fuse"), W = 560, L = 118;
+  function paint(mode) {
+    document.querySelectorAll("#fuse-mode button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.f === mode)));
+    // Contribución esperada a la norma² de un bloque estandarizado de d dims:
+    // tal cual, d; con w/√d, w².
+    const contrib = BL.map(([, d, w]) => mode === "raw" ? d : w * w);
+    const tot = d3.sum(contrib);
+    const x = d3.scaleLinear().domain([0, 1]).range([0, W - L - 60]);
+    const rows = svg.selectAll("g.r").data(BL).join(enter => {
+      const g = enter.append("g").attr("class", "r");
+      g.append("text").attr("class", "l"); g.append("rect").attr("class", "bg"); g.append("rect").attr("class", "b"); g.append("text").attr("class", "v");
+      return g;
+    }).attr("transform", (_, i) => `translate(0,${16 + i * 46})`);
+    rows.select(".l").attr("x", L - 10).attr("y", 15).attr("text-anchor", "end").attr("font-size", 12.5).attr("font-weight", 600)
+      .text(d => `${d[0]} (${d[1]})`);
+    rows.select(".bg").attr("x", L).attr("y", 2).attr("height", 20).attr("rx", 5).attr("width", x(1)).attr("fill", C.soft);
+    rows.select(".b").attr("x", L).attr("y", 2).attr("height", 20).attr("rx", 5).attr("fill", d => d[3])
+      .transition().duration(500).attr("width", (_, i) => Math.max(2, x(contrib[i] / tot)));
+    rows.select(".v").attr("y", 16).attr("font-size", 12.5).attr("font-weight", 700)
+      .transition().duration(500).attr("x", (_, i) => L + Math.max(2, x(contrib[i] / tot)) + 8)
+      .text((_, i) => Math.round(contrib[i] / tot * 100) + " %");
+    svg.selectAll("text.cap").data([0]).join("text").attr("class", "cap").attr("x", 0).attr("y", 160).attr("font-size", 11.5).attr("fill", C.muted)
+      .text(mode === "raw" ? "Tal cual: graph2vec se lo lleva casi todo solo por tener más columnas."
+                           : "Con w/√d: cada bloque pesa según su w (1 : 1 : 0,5), no según sus columnas.");
+  }
+  document.querySelectorAll("#fuse-mode button").forEach(b => b.addEventListener("click", () => paint(b.dataset.f)));
+  paint("w");
+})();
+
+/* ═══ 7 · Coseno ═══════════════════════════════════════════════════════ */
+(function cosDemo() {
+  const svg = d3.select("#cos"), node = svg.node(), O = [150, 250], U = 1;
+  let A = [230, -70], B = [190, -140];
+  const defs = svg.append("defs");
+  for (const [id, c] of [["ha", C.hs], ["hb", C.emb]])
+    defs.append("marker").attr("id", id).attr("viewBox", "0 0 10 10").attr("refX", 8).attr("refY", 5)
+      .attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto")
+      .append("path").attr("d", "M0 0L10 5L0 10z").attr("fill", c);
+  svg.append("line").attr("x1", 20).attr("x2", 540).attr("y1", O[1]).attr("y2", O[1]).attr("stroke", C.line);
+  svg.append("line").attr("x1", O[0]).attr("x2", O[0]).attr("y1", 12).attr("y2", 290).attr("stroke", C.line);
+  const arc = svg.append("path").attr("fill", C.crime).attr("fill-opacity", .12).attr("stroke", C.crime).attr("stroke-width", 1.5);
+  const arcT = svg.append("text").attr("font-size", 13).attr("font-weight", 700).attr("fill", C.crimeDeep);
+  const la = svg.append("line").attr("stroke", C.hs).attr("stroke-width", 3.5).attr("marker-end", "url(#ha)");
+  const lb = svg.append("line").attr("stroke", C.emb).attr("stroke-width", 3.5).attr("marker-end", "url(#hb)");
+  const ta = svg.append("text").attr("font-size", 13).attr("font-weight", 700).attr("fill", C.hs).text("A");
+  const tb = svg.append("text").attr("font-size", 13).attr("font-weight", 700).attr("fill", C.emb).text("B");
+  const ha = svg.append("circle").attr("r", 12).attr("fill", C.hs).attr("fill-opacity", .15).style("cursor", "grab");
+  const hb = svg.append("circle").attr("r", 12).attr("fill", C.emb).attr("fill-opacity", .15).style("cursor", "grab");
+  function paint() {
+    const P = v => [O[0] + v[0], O[1] + v[1]];
+    la.attr("x1", O[0]).attr("y1", O[1]).attr("x2", P(A)[0]).attr("y2", P(A)[1]);
+    lb.attr("x1", O[0]).attr("y1", O[1]).attr("x2", P(B)[0]).attr("y2", P(B)[1]);
+    ha.attr("cx", P(A)[0]).attr("cy", P(A)[1]); hb.attr("cx", P(B)[0]).attr("cy", P(B)[1]);
+    ta.attr("x", P(A)[0] + 12).attr("y", P(A)[1] - 6); tb.attr("x", P(B)[0] + 12).attr("y", P(B)[1] - 6);
+    const na = Math.hypot(...A), nb = Math.hypot(...B);
+    const cos = (A[0] * B[0] + A[1] * B[1]) / (na * nb || 1);
+    const a1 = Math.atan2(A[1], A[0]), a2 = Math.atan2(B[1], B[0]);
+    const r = 46, large = Math.abs(a2 - a1) > Math.PI ? 1 : 0;
+    let s = a1, e = a2; if (((e - s + 2 * Math.PI) % (2 * Math.PI)) > Math.PI) [s, e] = [e, s];
+    arc.attr("d", `M${O[0]},${O[1]} L${O[0] + r * Math.cos(s)},${O[1] + r * Math.sin(s)} A${r},${r} 0 0 1 ${O[0] + r * Math.cos(e)},${O[1] + r * Math.sin(e)} Z`);
+    const mid = (s + e) / 2 + (e < s ? Math.PI : 0);
+    arcT.attr("x", O[0] + (r + 16) * Math.cos(mid) - 8).attr("y", O[1] + (r + 16) * Math.sin(mid) + 4).text("θ");
+    const deg = Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI;
+    $("cos-read").innerHTML = `cos θ = <b>${comma(fmtD(cos, 3))}</b> (θ = ${fmtD(deg, 0)}°) · longitudes |A| = ${comma(fmtD(na / 10, 1))}, |B| = ${comma(fmtD(nb / 10, 1))}<br>` +
+      (cos > .9 ? `<span class="ok">Muy parecidas: apuntan casi igual, sea cual sea su tamaño.</span>`
+       : cos > .6 ? "Parecido moderado." : `<span class="bad">Formas distintas.</span>`);
+  }
+  const dragTo = which => d3.drag().on("drag", e => {
+    const p = svgPoint(node, e.sourceEvent);
+    const v = [Math.max(-140, Math.min(380, p.x - O[0])), Math.max(-235, Math.min(30, p.y - O[1]))];
+    if (Math.hypot(...v) < 20) return;
+    if (which === "A") A = v; else B = v;
+    paint();
+  });
+  ha.call(dragTo("A")); hb.call(dragTo("B"));
+  $("cos-scale").addEventListener("click", () => {
+    const f = Math.hypot(...B) > 200 ? .5 : 2, from = B.slice();
+    d3.transition().duration(500).tween("s", () => t => { B = [from[0] * (1 + (f - 1) * t), from[1] * (1 + (f - 1) * t)]; paint(); });
+    $("cos-scale").textContent = f === 2 ? "Acortar B ×½" : "Alargar B ×2";
+  });
+  $("cos-reset").addEventListener("click", () => { A = [230, -70]; B = [190, -140]; $("cos-scale").textContent = "Alargar B ×2"; paint(); });
+  paint();
+})();
+
+/* ═══ 8 · Trayectorias ═════════════════════════════════════════════════ */
+(function trajDemo() {
+  const G = [14, 7], CS = 34, OX = 42, OY = 18;
+  const rect = (c0, r0, w, h) => { const s = []; for (let r = r0; r < r0 + h; r++) for (let c = c0; c < c0 + w; c++) s.push(c + "," + r); return s; };
+  // Z1: persistente y estable, se desplaza poco. Z2: se mueve rápido, falta un
+  // mes y se pierde.
+  const MONTHS = [
+    { Z1: rect(1, 1, 3, 3), Z2: rect(8, 3, 3, 2) },
+    { Z1: rect(1, 1, 3, 3), Z2: rect(9, 2, 3, 2) },
+    { Z1: rect(2, 1, 3, 3), Z2: rect(11, 1, 2, 2) },
+    { Z1: rect(2, 2, 3, 3), Z2: null },
+    { Z1: rect(1, 2, 3, 3), Z2: rect(6, 4, 2, 2) },
+    { Z1: rect(1, 1, 3, 3), Z2: rect(6, 4, 3, 2) }
+  ];
+  const NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun"];
+  const iou = (a, b) => { const A = new Set(a), B = new Set(b); let i = 0; A.forEach(x => B.has(x) && i++); return i / (A.size + B.size - i); };
+  const center = s => [d3.mean(s, k => +k.split(",")[0]), d3.mean(s, k => +k.split(",")[1])];
+  const MIN_IOU = .2;
+
+  // Enlace: cada zona del mes contra la última aparición de su trayectoria.
+  const trajs = { Z1: [], Z2: [] }, links = [];
+  MONTHS.forEach((m, t) => {
+    for (const z of ["Z1", "Z2"]) {
+      if (!m[z]) continue;
+      const tr = trajs[z], last = tr.at(-1);
+      const v = last ? iou(last.cells, m[z]) : null;
+      if (last && v >= MIN_IOU) { tr.push({ t, cells: m[z], iou: v }); links.push({ z, t, v, ok: true }); }
+      else { if (last) links.push({ z, t, v, ok: false }); trajs[z] = [{ t, cells: m[z], iou: null, fresh: !!last }]; if (last) trajs[z].broken = true; }
+    }
+  });
+
+  const svg = d3.select("#traj");
+  for (let r = 0; r < G[1]; r++) for (let c = 0; c < G[0]; c++)
+    svg.append("rect").attr("x", OX + c * CS).attr("y", OY + r * CS).attr("width", CS - 3).attr("height", CS - 3).attr("rx", 5).attr("fill", "#f1f3f5");
+  const prevG = svg.append("g"), curG = svg.append("g"), txt = svg.append("g");
+  let m = 0, playT = null;
+  function paint() {
+    $("traj-m").value = m; $("traj-m-o").textContent = NAMES[m];
+    const cur = MONTHS[m], prev = m > 0 ? MONTHS[m - 1] : null;
+    const cells = z => (cur[z] || []).map(k => ({ z, k }));
+    curG.selectAll("rect").data([...cells("Z1"), ...cells("Z2")], d => d.z + d.k).join(
+      en => en.append("rect").attr("opacity", 0).attr("rx", 5)
+        .attr("x", d => OX + +d.k.split(",")[0] * CS).attr("y", d => OY + +d.k.split(",")[1] * CS)
+        .attr("width", CS - 3).attr("height", CS - 3).call(s => s.transition().duration(350).attr("opacity", .82)),
+      up => up, ex => ex.transition().duration(250).attr("opacity", 0).remove())
+      .attr("fill", d => d.z === "Z1" ? C.hs : C.crime);
+    const pc = z => prev && prev[z] ? prev[z].map(k => ({ z, k })) : [];
+    prevG.selectAll("rect").data([...pc("Z1"), ...pc("Z2")], d => d.z + d.k).join("rect")
+      .attr("x", d => OX + +d.k.split(",")[0] * CS - 1).attr("y", d => OY + +d.k.split(",")[1] * CS - 1)
+      .attr("width", CS - 1).attr("height", CS - 1).attr("rx", 6).attr("fill", "none")
+      .attr("stroke", d => d.z === "Z1" ? C.hsDeep : C.crimeDeep).attr("stroke-width", 1.8).attr("stroke-dasharray", "4 3");
+    txt.selectAll("*").remove();
+    const lines = [];
+    for (const z of ["Z1", "Z2"]) {
+      const l = links.find(x => x.z === z && x.t === m);
+      if (m === 0) lines.push(`${z}: aparece por primera vez.`);
+      else if (!cur[z]) lines.push(`<b>${z}</b>: no aparece este mes (puede faltar hasta 3 y seguir viva).`);
+      else if (!l) lines.push(`<b>${z}</b>: sin aparición previa con la que comparar.`);
+      else lines.push(`<b>${z}</b>: IoU con su última aparición = <b>${comma(fmtD(l.v, 2))}</b> ` +
+        (l.ok ? `<span class="ok">≥ 0,2 → misma trayectoria</span>` : `<span class="bad">&lt; 0,2 → trayectoria nueva</span>`));
+    }
+    // Métricas acumuladas hasta este mes (Z1).
+    const z1 = MONTHS.slice(0, m + 1).map(x => x.Z1);
+    const ious = z1.slice(1).map((s, i) => iou(z1[i], s));
+    const moves = z1.slice(1).map((s, i) => { const a = center(z1[i]), b = center(s); return Math.hypot(a[0] - b[0], a[1] - b[1]) * 100; });
+    lines.push(`<span style="color:${C.hs}">■</span> Z1 hasta ${NAMES[m]} · Frequency = ${m + 1}/${m + 1} · ` +
+      `Stability = <b>${ious.length ? comma(fmtD(d3.mean(ious), 2)) : "—"}</b> · Movement ≈ <b>${moves.length ? fmtD(d3.mean(moves), 0) + " m" : "—"}</b>`);
+    $("traj-read").innerHTML = lines.join("<br>");
+  }
+  $("traj-m").addEventListener("input", e => { m = +e.target.value; paint(); });
+  $("traj-play").addEventListener("click", () => {
+    if (playT) { clearInterval(playT); playT = null; $("traj-play").textContent = "▶"; return; }
+    if (m === MONTHS.length - 1) m = 0;
+    $("traj-play").textContent = "❚❚"; paint();
+    playT = setInterval(() => { if (m >= MONTHS.length - 1) { clearInterval(playT); playT = null; $("traj-play").textContent = "▶"; return; } m++; paint(); }, 1300);
+  });
+  paint();
+})();
+
+/* ═══ 9 · POIs en pares ════════════════════════════════════════════════ */
+function drawPoi(cs) {
+  const lab = cs.meta.poi_meta.labels || {};
+  const nice = n => n.startsWith("lq:") ? (lab[n.slice(3)] || n.slice(3))
+                  : n === "per_node" ? "POIs por esquina" : n === "entropy_norm" ? "Diversidad (entropía)" : n;
+  const rows = cs.matched_poi_contrast.map(r => ({ ...r, label: nice(r.name) }))
+    .sort((a, b) => b.median_delta_nonzero - a.median_delta_nonzero);
+  const svg = d3.select("#poi"), W = 580, L = 150, R = 110, T = 26, rowH = 29;
+  svg.attr("viewBox", `0 0 ${W} ${T + rows.length * rowH + 10}`);
+  const x = d3.scaleLinear().domain([Math.min(0, d3.min(rows, r => r.median_delta_nonzero)), d3.max(rows, r => r.median_delta_nonzero)]).nice().range([L, W - R - 46]);
+  svg.append("text").attr("x", L).attr("y", 12).attr("font-size", 10.5).attr("fill", C.muted)
+    .text("Δ mediana del cociente de localización (caliente − fría)");
+  svg.append("text").attr("x", W - R + 10).attr("y", 12).attr("font-size", 10.5).attr("fill", C.muted).text("gana en");
+  svg.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", T - 6).attr("y2", T + rows.length * rowH).attr("stroke", C.line);
+  const g = svg.selectAll("g.r").data(rows).join("g").attr("class", "r").attr("transform", (_, i) => `translate(0,${T + i * rowH})`);
+  g.append("rect").attr("x", 0).attr("width", W).attr("height", rowH - 3).attr("fill", "transparent").attr("class", "hit");
+  g.append("text").attr("x", L - 10).attr("y", rowH / 2 + 2).attr("text-anchor", "end").attr("font-size", 12.5)
+    .attr("font-weight", r => r.p_adj < .05 ? 650 : 400).attr("fill", r => r.p_adj < .05 ? C.ink : C.muted).text(r => r.label);
+  g.append("rect").attr("class", "b").attr("y", 6).attr("height", rowH - 15).attr("rx", 4)
+    .attr("x", x(0)).attr("width", 0)
+    .attr("fill", r => r.p_adj < .05 ? C.poi : "#fff").attr("stroke", C.poi).attr("stroke-width", 1.4);
+  g.append("text").attr("class", "v").attr("y", rowH / 2 + 2).attr("font-size", 11.5).attr("font-weight", 650).attr("fill", C.ink2)
+    .attr("x", r => x(Math.max(0, r.median_delta_nonzero)) + 6).text(r => (r.median_delta_nonzero >= 0 ? "+" : "") + comma(fmtD(r.median_delta_nonzero, 1)));
+  g.append("text").attr("x", W - R + 10).attr("y", rowH / 2 + 2).attr("font-size", 12).attr("font-weight", 650)
+    .attr("fill", r => r.wins > .6 ? "#087f5b" : C.muted).text(r => Math.round(r.wins * 100) + " %");
+  whenVisible($("poi"), () => g.select(".b").transition().delay((_, i) => i * 70).duration(600)
+    .attr("x", r => x(Math.min(0, r.median_delta_nonzero))).attr("width", r => Math.max(1.5, Math.abs(x(r.median_delta_nonzero) - x(0)))));
+  g.on("mouseenter", function (e, r) {
+      d3.select(this).select(".hit").attr("fill", C.soft);
+      $("poi-read").innerHTML = `<b>${r.label}</b> · en ${r.n_pairs} pares; en los que no empatan, la caliente tiene ` +
+        `<b>${(r.median_delta_nonzero >= 0 ? "+" : "") + comma(fmtD(r.median_delta_nonzero, 2))}</b> de mediana y gana en el <b>${Math.round(r.wins * 100)} %</b>. ` +
+        `p ajustado = ${r.p_adj < .001 ? "&lt; 0,001" : comma(fmtD(r.p_adj, 3))} ` +
+        (r.p_adj < .05 ? `<span class="ok">(significativo)</span>` : `<span class="bad">(no significativo)</span>`);
+    })
+   .on("mouseleave", function () { d3.select(this).select(".hit").attr("fill", "transparent"); });
+  const p = cs.matched_pairs[0];
+  if (p) $("pair-ex").innerHTML =
+    `<span class="chip">ejemplo de par <b>${p.high}</b> vs <b>${p.low}</b></span>` +
+    `<span class="chip">distancia de forma <b>${comma(fmtD(p.topo_distance, 2))}</b></span>` +
+    `<span class="chip">crimen <b style="color:${C.crime}">${p.crimes_high}</b> vs <b>${p.crimes_low}</b></span>`;
+}
+
+/* ═══ 10 · Validación ══════════════════════════════════════════════════ */
+function drawValidation(ev, bench) {
+  const svg = d3.select("#val"), W = 580;
+  const M = [["topo", "Este método", C.crime], ["greedy", "BFS voraz", "#868e96"], ["bfs", "BFS anchura", "#ced4da"]]
+    .filter(([k]) => ev.methods[k]);
+  // Izquierda: crimen capturado con la misma huella.
+  const g1 = svg.append("g").attr("transform", "translate(0,0)");
+  g1.append("text").attr("x", 0).attr("y", 14).attr("font-size", 11.5).attr("font-weight", 650).attr("fill", C.ink2).text("Crimen capturado · misma huella");
+  const y1 = d3.scaleLinear().domain([0, d3.max(M, ([k]) => ev.methods[k].captured) * 1.1]).range([250, 36]);
+  M.forEach(([k, name, col], i) => {
+    const m = ev.methods[k], bx = 18 + i * 82;
+    const r = g1.append("rect").attr("x", bx).attr("width", 58).attr("rx", 6).attr("fill", col).attr("y", 250).attr("height", 0);
+    whenVisible($("val"), () => r.transition().delay(i * 150).duration(700).attr("y", y1(m.captured)).attr("height", 250 - y1(m.captured)));
+    g1.append("text").attr("x", bx + 29).attr("y", y1(m.captured) - 6).attr("text-anchor", "middle").attr("font-size", 11.5).attr("font-weight", 700).text(fmtN(m.captured));
+    g1.append("text").attr("x", bx + 29).attr("y", 266).attr("text-anchor", "middle").attr("font-size", 11).attr("font-weight", 600).text(name);
+    g1.append("text").attr("x", bx + 29).attr("y", 281).attr("text-anchor", "middle").attr("font-size", 10).attr("fill", C.muted).text(fmtN(m.nodes) + " nodos");
+  });
+  const cmp = ev.comparisons && ev.comparisons[0];
+  if (cmp) g1.append("text").attr("x", 18).attr("y", 298).attr("font-size", 10.5).attr("fill", C.crimeDeep).attr("font-weight", 650)
+    .text(`+${fmtN(cmp.gain_absolute)} (+${comma(fmtD(cmp.gain_relative * 100, 1))} %) sobre la voraz`);
+  // Derecha: validación sintética.
+  if (!bench) return;
+  const L = bench.regimes[bench.default_regime || "lima"].methods;
+  const MS = [["topologico", "Este método", C.crime], ["voraz", "BFS voraz", "#868e96"], ["anchura", "BFS anchura", "#ced4da"]].filter(([k]) => L[k]);
+  const g2 = svg.append("g").attr("transform", "translate(290,0)");
+  g2.append("text").attr("x", 0).attr("y", 14).attr("font-size", 11.5).attr("font-weight", 650).attr("fill", C.ink2).text("Datos sintéticos · verdad conocida");
+  const MET = [["ppv", "Precisión"], ["sensitivity", "Sensibilidad"], ["f1", "F1"]];
+  const x0 = d3.scaleBand().domain(MET.map(m => m[0])).range([0, 285]).padding(.2);
+  const x1 = d3.scaleBand().domain(MS.map(m => m[0])).range([0, x0.bandwidth()]).padding(.08);
+  const y2 = d3.scaleLinear().domain([0, 1]).range([250, 36]);
+  [0, .5, 1].forEach(v => {
+    g2.append("line").attr("x1", 0).attr("x2", 285).attr("y1", y2(v)).attr("y2", y2(v)).attr("stroke", C.soft);
+    g2.append("text").attr("x", -6).attr("y", y2(v) + 3).attr("text-anchor", "end").attr("font-size", 9.5).attr("fill", C.faint).text(comma(v));
+  });
+  MET.forEach(([mk, mname]) => {
+    MS.forEach(([k, , col], j) => {
+      const v = L[k].summary[mk].mean;
+      const r = g2.append("rect").attr("x", x0(mk) + x1(k)).attr("width", x1.bandwidth()).attr("rx", 3).attr("fill", col).attr("y", 250).attr("height", 0);
+      whenVisible($("val"), () => r.transition().delay(300 + j * 120).duration(700).attr("y", y2(v)).attr("height", 250 - y2(v)));
+      if (mk === "f1") g2.append("text").attr("x", x0(mk) + x1(k) + x1.bandwidth() / 2).attr("y", y2(v) - 5).attr("text-anchor", "middle")
+        .attr("font-size", 10).attr("font-weight", 700).attr("fill", j === 0 ? C.crimeDeep : C.muted).text(comma(fmtD(v, 2)));
+    });
+    g2.append("text").attr("x", x0(mk) + x0.bandwidth() / 2).attr("y", 266).attr("text-anchor", "middle").attr("font-size", 11).attr("font-weight", 600).text(mname);
+  });
+  const lg = g2.append("g").attr("transform", "translate(0,284)");
+  MS.forEach(([, n, col], i) => {
+    lg.append("rect").attr("x", i * 96).attr("y", -8).attr("width", 10).attr("height", 10).attr("rx", 2).attr("fill", col);
+    lg.append("text").attr("x", i * 96 + 14).attr("y", 1).attr("font-size", 10.5).attr("fill", C.ink2).text(n);
+  });
+}
+
+(function f1Demo() {
+  const svg = d3.select("#f1"), W = 560, L = 20, R = 20;
+  const x = d3.scaleLinear().domain([0, 1]).range([L, W - R]);
+  const T0 = .4, T1 = .6;
+  svg.append("line").attr("x1", x(0)).attr("x2", x(1)).attr("y1", 40).attr("y2", 40).attr("stroke", "#cfd4db").attr("stroke-width", 10).attr("stroke-linecap", "round");
+  svg.append("text").attr("x", L).attr("y", 18).attr("font-size", 10.5).attr("fill", C.muted).text("una calle");
+  svg.append("rect").attr("x", x(T0)).attr("width", x(T1) - x(T0)).attr("y", 33).attr("height", 14).attr("rx", 4).attr("fill", C.poi);
+  svg.append("text").attr("x", x((T0 + T1) / 2)).attr("y", 24).attr("text-anchor", "middle").attr("font-size", 10.5).attr("fill", "#087f5b").attr("font-weight", 650).text("foco verdadero");
+  const det = svg.append("rect").attr("y", 52).attr("height", 12).attr("rx", 4).attr("fill", C.crime).attr("fill-opacity", .85);
+  const bars = svg.append("g").attr("transform", "translate(0,86)");
+  const MET = [["Precisión", C.hs], ["Sensibilidad", C.emb], ["F1", C.crime]];
+  const bx = d3.scaleLinear().domain([0, 1]).range([0, W - 190]);
+  MET.forEach(([n, c], i) => {
+    const g = bars.append("g").attr("transform", `translate(0,${i * 26})`);
+    g.append("text").attr("x", 100).attr("y", 12).attr("text-anchor", "end").attr("font-size", 12).attr("font-weight", 600).text(n);
+    g.append("rect").attr("x", 110).attr("width", bx(1)).attr("height", 14).attr("rx", 4).attr("fill", C.soft);
+    g.append("rect").attr("class", "b").attr("x", 110).attr("height", 14).attr("rx", 4).attr("fill", c);
+    g.append("text").attr("class", "v").attr("y", 12).attr("font-size", 12).attr("font-weight", 700);
+  });
+  function paint() {
+    const c = +$("f1-c").value, w = +$("f1-w").value;
+    const a = Math.max(0, c - w / 2), b = Math.min(1, c + w / 2);
+    det.attr("x", x(a)).attr("width", Math.max(2, x(b) - x(a)));
+    const ov = Math.max(0, Math.min(b, T1) - Math.max(a, T0));
+    const ppv = ov / (b - a || 1), sens = ov / (T1 - T0), f1 = ppv + sens ? 2 * ppv * sens / (ppv + sens) : 0;
+    [ppv, sens, f1].forEach((v, i) => {
+      const g = bars.select(`g:nth-child(${i + 1})`);
+      g.select(".b").attr("width", bx(v));
+      g.select(".v").attr("x", 110 + bx(v) + 6).text(comma(fmtD(v, 2)));
+    });
+    $("f1-c-o").textContent = comma(fmtD(c, 2)); $("f1-w-o").textContent = comma(fmtD(w, 2));
+  }
+  $("f1-c").addEventListener("input", paint); $("f1-w").addEventListener("input", paint);
+  paint();
+})();
+
+/* ═══ Límites · barrido de σ ═══════════════════════════════════════════ */
+function drawSweep(sweep, sigma) {
+  const pts = (sweep.axes && sweep.axes.sigma || []).filter(p => p.topologico);
+  if (!pts.length) return;
+  const svg = d3.select("#sweep"), W = 560, H = 250, L = 40, R = 110, T = 16, B = 36;
+  const x = d3.scaleLinear().domain(d3.extent(pts, p => p.value)).range([L, W - R]);
+  const y = d3.scaleLinear().domain([0, 1]).range([H - B, T]);
+  svg.append("g").attr("transform", `translate(0,${H - B})`).call(d3.axisBottom(x).tickValues(pts.map(p => p.value)).tickFormat(v => v + " m"))
+    .call(g => g.selectAll("text").attr("font-size", 10).attr("fill", C.muted)).call(g => g.selectAll("line,path").attr("stroke", C.line));
+  svg.append("g").attr("transform", `translate(${L},0)`).call(d3.axisLeft(y).ticks(4).tickFormat(v => comma(v)))
+    .call(g => g.selectAll("text").attr("font-size", 10).attr("fill", C.muted)).call(g => g.selectAll("line,path").attr("stroke", C.line));
+  svg.append("text").attr("x", (L + W - R) / 2).attr("y", H - 4).attr("text-anchor", "middle").attr("font-size", 10.5).attr("fill", C.muted).text("ancho de banda σ");
+  if (sigma) {
+    svg.append("line").attr("x1", x(sigma)).attr("x2", x(sigma)).attr("y1", T).attr("y2", H - B).attr("stroke", C.ink).attr("stroke-dasharray", "3 3");
+    svg.append("text").attr("x", x(sigma) + 4).attr("y", T + 10).attr("font-size", 10.5).attr("font-weight", 650).text("σ en uso");
+  }
+  const S = [["ppv", "Precisión", C.hs], ["sensitivity", "Sensibilidad", C.emb], ["f1", "F1", C.crime]];
+  S.forEach(([k, n, c]) => {
+    const line = d3.line().x(p => x(p.value)).y(p => y(p.topologico[k].mean));
+    const path = svg.append("path").attr("d", line(pts)).attr("fill", "none").attr("stroke", c).attr("stroke-width", k === "f1" ? 3 : 2);
+    const len = path.node().getTotalLength();
+    path.attr("stroke-dasharray", `${len} ${len}`).attr("stroke-dashoffset", len);
+    whenVisible($("sweep"), () => path.transition().duration(1200).attr("stroke-dashoffset", 0));
+    svg.selectAll(null).data(pts).join("circle").attr("cx", p => x(p.value)).attr("cy", p => y(p.topologico[k].mean)).attr("r", 3.5).attr("fill", c)
+      .on("mousemove", (e, p) => tip(e, `σ = ${p.value} m · ${n} ${comma(fmtD(p.topologico[k].mean, 3))}`)).on("mouseleave", e => tip(e, null));
+    const last = pts.at(-1);
+    svg.append("text").attr("x", W - R + 8).attr("y", y(last.topologico[k].mean) + 4).attr("font-size", 11.5).attr("font-weight", 650).attr("fill", c).text(n);
+  });
+}
+</script>
+</body>
+</html>
